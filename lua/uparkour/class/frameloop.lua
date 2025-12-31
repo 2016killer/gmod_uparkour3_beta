@@ -104,9 +104,7 @@ end
 
 local function __Internal_StartFrameLoop(hookName)
 	local hookState = hookStatus[hookName]
-	if hookState then
-		hookState.startTime = CurTime()
-	else
+	if not hookState then
 		hookState = {startTime = CurTime()}
 		hookStatus[hookName] = hookState
 	end
