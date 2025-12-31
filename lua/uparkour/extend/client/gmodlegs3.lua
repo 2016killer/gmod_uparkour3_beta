@@ -29,7 +29,10 @@ temp_upext_gmodlegs3_compat_changecall(nil, nil, upext_gmodlegs3_compat:GetBool(
 temp_upext_gmodlegs3_compat_changecall = nil
 
 -- ==============================================================
--- UPManip 控制 玩家模型
+-- 在 UPManip 中注册骨骼映射数据
+-- BoneKeys 必须按照骨骼父级等级排序, 
+-- 可以用 UPManip:GetBoneMappingKeysSorted(ent, boneMapping, useLRU2) 来获取 BoneKeys
+-- 或者调用后手动编码
 -- ==============================================================
 
 UPManip.BoneMappingCollect['VMLegs'] = {
@@ -64,12 +67,18 @@ UPManip.BoneKeysCollect['VMLegs'] = {
 	'ValveBiped.Bip01_R_Toe0'
 }
 
+-- ==============================================================
+-- UPManip 控制 Gmod Legs 3 (仿真的)
+-- 由于 UPManip 对实体位置有非常严格的要求, 再者 Gmod Legs 3 的源代码无法满足低入侵修改, 于是有了此
+-- 由于这个实在容易让人感到混乱, 所以我特意多写一些注释
+-- ==============================================================
 g_GmodLeg3Faker = {}
-local GmodLeg3Faker = g_GmodLeg3Faker
 
 local zerovec = Vector(0, 0, 0)
 local zeroang = Angle(0, 0, 0)
 local diagonalvec = Vector(1, 1, 1)
+
+local GmodLeg3Faker = g_GmodLeg3Faker
 
 GmodLeg3Faker.BoneMapping = 'VMLegs'
 GmodLeg3Faker.BoneKeys = 'VMLegs'
@@ -124,6 +133,7 @@ GmodLeg3Faker.BonesToRemoveVehicle = {
 	"ValveBiped.Bip01_Head1",
 }
 
+-- 原版 Gmod Legs 3 需要3个帧循环来完成视觉效果处理, 尊重原作, 这里也使用3个 
 GmodLeg3Faker.FRAME_LOOP_HOOK_UpdateAnimation = function(ply, velocity, maxseqgroundspeed)
 	-- 来自 GmodLegs3
 	if ply == LocalPlayer() then
@@ -158,6 +168,7 @@ GmodLeg3Faker.FRAME_LOOP_HOOK_RenderScreenspaceEffects = function()
 	end
 end
 
+-- 由于不想造成额外的性能开销, 这里使用懒加载策略, 所以需要一些函数来管理
 function GmodLeg3Faker:PushFrameLoopHook(timeout)
 	if not self:Init() then
 		return false
@@ -189,6 +200,7 @@ function GmodLeg3Faker:SetNewFrameLoopHookIdentity(identity)
 	self.FRAME_LOOP_HOOK_IDENTITY = identity
 end
 
+-- 这里依旧尊重
 function GmodLeg3Faker:WeaponChanged(weap)
 	if IsValid(self.LegEnt) then
 		for i = 0, self.LegEnt:GetBoneCount() do
@@ -211,6 +223,7 @@ function GmodLeg3Faker:WeaponChanged(weap)
 	end
 end
 
+-- 这里需要改一下, 原版的 腿部实体是在原点(零点), 而 UPManip 需要正确位置
 function GmodLeg3Faker:DoFinalRender()
 	-- 来自 GmodLegs3
 	cam.Start3D(EyePos(), EyeAngles())
@@ -259,6 +272,7 @@ function GmodLeg3Faker:DoFinalRender()
 	cam.End3D()
 end
 
+-- 这里用元表吧, 需要重新初始化一个腿部实体
 function GmodLeg3Faker:Init()
 	if not g_Legs or not istable(g_Legs) then
 		print('[UPExt]: [Gmod Legs 3] not install!')
@@ -283,12 +297,19 @@ function GmodLeg3Faker:FadeIn(tarEnt, lerpSpeed)
 		return false
 	end
 
-	self.LegEnt:SetupBones()
+	-- 快照需要在骨骼强制更新之后
 	self.LegEnt:SetParent(tarEnt)
+	self.LegEnt:SetupBones()
 	self.Snapshot = UPManip:Snapshot(g_GmodLeg3Faker.LegEnt, 'VMLegs')
 	self.TarEnt, self.LastTarEnt = tarEnt, tarEnt
 	self.LerpSpeed = math.abs(isnumber(lerpSpeed) and lerpSpeed or 5)
 	self.LerpT = 0
+
+	-- 这个非常重要, 用来标记是否是第一次变换完成, UPManip 需要在第一次变换完成后才能进行插值
+	-- 而原版 Gmod Legs 3 是在渲染中更新位置的, 所以尊重
+	self.IsFirstTransformFinished = false
+
+	self:PushFrameLoopHook()
 
 	return true
 end
@@ -298,6 +319,11 @@ function GmodLeg3Faker:FadeOut(lerpSpeed)
 end
 
 function GmodLeg3Faker:ManipThink()
+	-- 这很重要
+	if not self.IsFirstTransformFinished then
+		return
+	end
+
 	if not isnumber(self.LerpT) then
 		ErrorNoHaltWithStack('GmodLeg3Faker:ManipThink: LerpT is not a number!')
 		self.LerpT = 0
@@ -312,7 +338,7 @@ function GmodLeg3Faker:ManipThink()
 	
 	if self.LastTarEnt ~= self.TarEnt then
 		local newLerpT = hook.Run('UPExtGmodLegs3Manip_OnChangeSequence', self, self.LastTarEnt, self.TarEnt)
-		self.LerpT = newLerpT == nil and 0 or newLerpT
+		self.LerpT = isnumber(newLerpT) and newLerpT or 0
 	end
 	
 	if IsValid(self.TarEnt) and IsValid(self.LegEnt) then
