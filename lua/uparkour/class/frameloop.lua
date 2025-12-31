@@ -20,15 +20,16 @@ local RESUME_HOOK = 'UParResumeFrameLoop'
 
 -- 【保留你的设计】：钩子回调函数，使用 break 避免帧循环重写导致校验失效
 local function FrameCall(hookName)
-	local removeCurrentHookFlag = true
-	local curTime = CurTime()
 	local hookState = hookStatus[hookName]
 	if not hookState then 
 		print(string.format('[UPar.FrameLoop]: warning: hookState "%s" not found', hookName))
 		hook.Remove(hookName, FRAME_HOOK_IDENTITY)
 		return 
 	end
-	
+
+	local removeCurrentHookFlag = true
+	local curTime = CurTime()
+
 	local dt = curTime - hookState.startTime
 	hookState.startTime = curTime
 	
