@@ -1,0 +1,51 @@
+<p align="center">
+  <a href="./README_en.md">English</a> |
+  <a href="./README.md">简体中文</a>
+</p>
+
+## Table of Contents
+
+<a href="./UPACTION_en.md">UPAction</a>  
+<a href="./UPEFFECT_en.md">UPEffect</a>  
+<a href="./SERHOOK_en.md">SeqHook</a>  
+<a href="./HOOK_en.md">Hook</a>  
+<a href="./LRU_en.md">LRU</a>  
+<a href="./CUSTOMEFFECT_en.md">Custom Effect</a>  
+<a href="./UPMANIP_en.md">UPManip</a>  
+<a href="./UPKEYBOARD_en.md">UPKeyboard</a>  
+<a href="./FRAMELOOP_en.md">FrameLoop</a>  
+
+# UPManip - Bone Manipulation
+```note
+Note: This is a test module and is not recommended for use in a production environment.
+
+These are all very difficult to use. They are simply a pile of crap.
+```
+
+
+## Overview
+The `upmanip_test` console command can be used to test the functionality of UPManip.
+
+This is a **client-side only** API that provides direct control over bones via methods such as **ent:ManipulateBonexxx**.
+
+### Advantages:
+1. Directly manipulates bones without the need for methods like **ent:AddEffects(EF_BONEMERGE)**, **BuildBonePositions**, or **ResetSequence**.
+2. Compared to **VMLeg**, it supports fade-out animations, and no snapshots are required for these fade-out animations.
+
+### Disadvantages:
+1. High computational overhead, as several matrix operations need to be performed via **Lua** each time.
+2. Requires per-frame updates.
+3. Cannot handle singular matrices, which typically occur when a bone's scale is set to 0.
+4. May conflict with other methods that use **ent:ManipulateBonexxx**, resulting in abnormal animations.
+
+## Available Methods
+
+![client](./materials/upgui/client.jpg)
+**vec, ang** UPManip.SetBonePosition(**entity** ent, **int** boneId, **vector** posw, **angle** angw)
+```note
+Controls the position and angle of the specified bone of the target entity.
+The new position cannot be too far from the old position (128 units maximum).
+It is recommended to call ent:SetupBones() before using this function, as the current bone matrix is required for calculations.
+
+This is already the most convenient one. The others are just a bunch of feces.
+```
