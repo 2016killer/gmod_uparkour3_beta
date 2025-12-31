@@ -3,9 +3,7 @@
 	2025 12 28
 --]]
 
-local zerovec = UPar.zerovec
-local zeroang = UPar.zeroang
-local diagonalvec = UPar.diagonalvec
+
 local emptyTable = UPar.emptyTable
 
 UPManip = UPManip or {}
