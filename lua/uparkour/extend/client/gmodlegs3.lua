@@ -159,14 +159,20 @@ GmodLeg3Faker.FRAME_LOOP_HOOK_RenderScreenspaceEffects = function()
 end
 
 function GmodLeg3Faker:PushFrameLoopHook(timeout)
+	if not self:Init() then
+		return false
+	end
+
 	local identity = self.FRAME_LOOP_HOOK_IDENTITY
     hook.Add('UpdateAnimation', identity, self.FRAME_LOOP_HOOK_UpdateAnimation)
 	hook.Add('PostDrawTranslucentRenderables', identity, self.FRAME_LOOP_HOOK_PostDrawTranslucentRenderables)
 	hook.Add('RenderScreenspaceEffects', identity, self.FRAME_LOOP_HOOK_RenderScreenspaceEffects)
-	timeout = isnumber(timeout) and timeout or 20
+	timeout = isnumber(timeout) and timeout or 5
 	timer.Create(self.TIMER_IDENTITY, timeout, 1, function()
-		PopFrameLoopHook()
+		self:PopFrameLoopHook()
 	end)
+
+	return true
 end
 
 function GmodLeg3Faker:PopFrameLoopHook()
@@ -174,6 +180,8 @@ function GmodLeg3Faker:PopFrameLoopHook()
     hook.Remove('UpdateAnimation', identity)
 	hook.Remove('PostDrawTranslucentRenderables', identity)
 	hook.Remove('RenderScreenspaceEffects', identity)
+
+	return true
 end
 
 function GmodLeg3Faker:SetNewFrameLoopHookIdentity(identity)
@@ -270,14 +278,15 @@ function GmodLeg3Faker:Init()
 	return IsValid(self.LegEnt)
 end
 
-function GmodLeg3Faker:FadeIn(target, lerpSpeed)
+function GmodLeg3Faker:FadeIn(tarEnt, lerpSpeed)
 	if not self:Init() then
 		return false
 	end
 
-	self.LegEnt:SetParent(target)
+	self.LegEnt:SetupBones()
+	self.LegEnt:SetParent(tarEnt)
 	self.Snapshot = UPManip:Snapshot(g_GmodLeg3Faker.LegEnt, 'VMLegs')
-	self.Target, self.LastTarget = target, nil
+	self.TarEnt, self.LastTarEnt = tarEnt, tarEnt
 	self.LerpSpeed = math.abs(isnumber(lerpSpeed) and lerpSpeed or 5)
 	self.LerpT = 0
 
@@ -289,33 +298,47 @@ function GmodLeg3Faker:FadeOut(lerpSpeed)
 end
 
 function GmodLeg3Faker:ManipThink()
+	if not isnumber(self.LerpT) then
+		ErrorNoHaltWithStack('GmodLeg3Faker:ManipThink: LerpT is not a number!')
+		self.LerpT = 0
+	end
+
+	if not IsValid(self.LegEnt) then
+		ErrorNoHaltWithStack('GmodLeg3Faker:ManipThink: LegEnt is not valid!')
+		self:PopFrameLoopHook()
+	end
+
 	self.LerpT = math.Clamp(self.LerpT + FrameTime() * self.LerpSpeed, 0, 1)
 	
-	if self.LastTarget ~= self.Target then
-		local newLerpT, newTarget = hook.Run('UPExtGmodLegs3Manip_OnChangeSequence', self, self.LastTarget, self.Target)
+	if self.LastTarEnt ~= self.TarEnt then
+		local newLerpT = hook.Run('UPExtGmodLegs3Manip_OnChangeSequence', self, self.LastTarEnt, self.TarEnt)
 		self.LerpT = newLerpT == nil and 0 or newLerpT
-		self.Target = newTarget
 	end
 	
-	if IsValid(self.Target) and IsValid(self.LegEnt) then
-		self.Target:SetupBones()
+	if IsValid(self.TarEnt) and IsValid(self.LegEnt) then
+		self.TarEnt:SetupBones()
 		self.LegEnt:SetupBones()
 		UPManip:LerpBoneWorld(
 			self.LegEnt, 
 			self.LerpT, 
 			self.Snapshot or emptyTable, 
-			self.Target, 
+			self.TarEnt, 
 			self.BoneMapping, 
 			self.BoneKeys
 		)
-	elseif IsValid(self.LegEnt) then
+	else
 		local boneMapping = UPManip:GetBoneMapping(self.BoneMapping)
 
 		for boneName, _ in pairs(boneMapping) do
 			local bone = self.LegEnt:LookupBone(boneName)
-			local curManipPos = self.LegEnt:GetManipulatedBonePosition(bone)
-			local curManipAng = self.LegEnt:GetManipulatedBoneAngles(bone)
-			local curManipScale = self.LegEnt:GetManipulatedBoneScale(bone)
+
+			if not bone then
+				continue
+			end
+
+			local curManipPos = self.LegEnt:GetManipulateBonePosition(bone)
+			local curManipAng = self.LegEnt:GetManipulateBoneAngles(bone)
+			local curManipScale = self.LegEnt:GetManipulateBoneScale(bone)
 
 			local newManipPos = LerpVector(self.LerpT, curManipPos, zerovec)
 			local newManipAng = LerpAngle(self.LerpT, curManipAng, zeroang)
@@ -327,11 +350,12 @@ function GmodLeg3Faker:ManipThink()
 		end
 
 		if self.LerpT >= 1 then
-			hook.Run('UPExtGmodLegs3Manip_OnCompleteSequence', self, self.LastTarget, self.Target)
+			local stopPop = hook.Run('UPExtGmodLegs3Manip_OnCompleteSequence', self, self.TarEnt)
+			if not stopPop then self:PopFrameLoopHook() end
 		end
 	end
 
-	self.LastTarget = self.Target
+	self.LastTarEnt = self.TarEnt
 end
 
 
@@ -348,18 +372,41 @@ GmodLeg3Faker.MAIN_HOOK_VMLegsPostPlayAnim = function(anim)
 		return false
 	end
 
+	local animData = VMLegs:GetAnim(anim)
+	if not animData then
+		print(string.format('[UPExt]: GmodLegs3Manip: anim "%s" not found', anim))
+		return false
+	end
+
+	VMLegs.LegModel:SetNoDraw(true)
+
 	local self = GmodLeg3Faker
-	self:FadeIn(VMLegs.LegParent)
+
+	local tarEnt = VMLegs.LegParent
+	local lerpSpeed = animData.lerp_speed_in
+
+	-- 有短路保护
+	local succ = self:PushFrameLoopHook()
+	if succ then
+		timer.Simple(0, function()
+			self:FadeIn(VMLegs.LegParent, lerpSpeed)
+		end)
+	end
+
+	return succ
 end
 
 GmodLeg3Faker.MAIN_HOOK_VMLegsPreRemove = function(anim)
 	local self = GmodLeg3Faker
-	self:FadeOut()
+	local animData = VMLegs:GetAnim(anim)
+	local lerpSpeed = animData and animData.lerp_speed_out
+	self:FadeOut(lerpSpeed)
+
+	return true
 end
 
 
 function GmodLeg3Faker:Register()
-	print(self, self.MAIN_HOOK_IDENTITY)
 	local identity = self.MAIN_HOOK_IDENTITY
 	hook.Add('VMLegsPostPlayAnim', identity, self.MAIN_HOOK_VMLegsPostPlayAnim)
 	hook.Add('VMLegsPreRemove', identity, self.MAIN_HOOK_VMLegsPreRemove)
@@ -376,6 +423,12 @@ function GmodLeg3Faker:UnRegister()
 	end
 end
 
+
+hook.Add('UPExtGmodLegs3Manip_OnCompleteSequence', 'test', function()
+	return true
+end)
+
+
 local upext_gmodlegs3_manip = CreateClientConVar('upext_gmodlegs3_manip', '1', true, false, '')
 local function temp_upext_gmodlegs3_manip_changecall(name, old, new)
 	local HOOK_IDENTITY_COMPAT = 'upar.gmodleg3.compat'
@@ -389,7 +442,7 @@ local function temp_upext_gmodlegs3_manip_changecall(name, old, new)
 end
 cvars.AddChangeCallback('upext_gmodlegs3_manip', temp_upext_gmodlegs3_manip_changecall, 'default')
 temp_upext_gmodlegs3_manip_changecall(nil, nil, upext_gmodlegs3_manip:GetBool() and '1' or '0')
-
+temp_upext_gmodlegs3_manip_changecall = nil
 -- ==============================================================
 -- 菜单
 -- ==============================================================
