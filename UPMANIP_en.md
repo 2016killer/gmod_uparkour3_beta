@@ -20,6 +20,11 @@
 Note: This is a test module and is not recommended for use in a production environment.
 
 These are all very difficult to use. They are simply a pile of crap.
+
+The usage threshold of this method is extremely high. Firstly, ManipulateBonePosition has a distance limit, which is set at 128 units.
+Therefore, if one wants to achieve correct interpolation, it is necessary to do so at the frame where the position update is completed.
+So, to achieve correct interpolation, it is best to add an additional flag + callback to handle it. This way, it is less likely to cause confusion.
+
 ```
 
 
