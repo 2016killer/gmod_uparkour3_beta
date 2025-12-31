@@ -25,6 +25,8 @@ The usage threshold of this method is extremely high. Firstly, ManipulateBonePos
 Therefore, if one wants to achieve correct interpolation, it is necessary to do so at the frame where the position update is completed.
 So, to achieve correct interpolation, it is best to add an additional flag + callback to handle it. This way, it is less likely to cause confusion.
 
+Interpolation requires specifying the bone mapping and its order. The order can be obtained by using the function UPManip:GetBoneMappingKeysSorted(ent, boneMapping, useLRU2) and then manually encoded.
+
 ```
 
 
