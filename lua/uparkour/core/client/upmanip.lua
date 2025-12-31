@@ -265,7 +265,7 @@ function UPManip:Snapshot(ent, boneMapping)
 end
 
 
-function UPManip:LerpBoneWorld(ent, t, snapshot, target, boneMapping, boneKeys)
+function UPManip:LerpBoneWorld(ent, t, snapshot, tarEnt, boneMapping, boneKeys)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 	boneKeys = self:GetBoneKeys(boneKeys)
@@ -281,25 +281,25 @@ function UPManip:LerpBoneWorld(ent, t, snapshot, target, boneMapping, boneKeys)
 
 		local curPos, curAng, curScale = unpack(snapshot[boneName])
 
-		local targetBoneName, offsetMatrix = UnpackBMData(data)
-		local targetBoneId = target:LookupBone(targetBoneName or boneName)
+		local tarEntBoneName, offsetMatrix = UnpackBMData(data)
+		local tarEntBoneId = tarEnt:LookupBone(tarEntBoneName or boneName)
 
-		if not targetBoneId then 
+		if not tarEntBoneId then 
 			continue
 		end
 		
-		local targetMatrix = target:GetBoneMatrix(targetBoneId)
-		if not targetMatrix then 
+		local tarEntMatrix = tarEnt:GetBoneMatrix(tarEntBoneId)
+		if not tarEntMatrix then 
 			continue
 		end
 		
 		if offsetMatrix then
-			targetMatrix = targetMatrix * offsetMatrix
+			tarEntMatrix = tarEntMatrix * offsetMatrix
 		end
 
-		local newPos = LerpVector(t, curPos, targetMatrix:GetTranslation())
-		local newAng = LerpAngle(t, curAng, targetMatrix:GetAngles())
-		local newScale = LerpVector(t, curScale, targetMatrix:GetScale())
+		local newPos = LerpVector(t, curPos, tarEntMatrix:GetTranslation())
+		local newAng = LerpAngle(t, curAng, tarEntMatrix:GetAngles())
+		local newScale = LerpVector(t, curScale, tarEntMatrix:GetScale())
 
 		ent:ManipulateBoneScale(boneId, newScale)
 		SetBonePosition(ent, boneId, newPos, newAng)
