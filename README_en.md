@@ -62,6 +62,10 @@ Name: Bai Lang
 Link: https://steamcommunity.com/id/whitewolfking/  
 Contribution: Most of the code and Chinese documentation
 
+Name: YuRaNnNzZZ
+Link: https://steamcommunity.com/id/yurannnzzz
+Contribution: hm500 animation
+
 Name: Miss Dou  
 Link: Doubao AI  
 Contribution: Part of the code and English documentation
