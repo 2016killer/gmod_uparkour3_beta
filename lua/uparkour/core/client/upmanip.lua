@@ -15,11 +15,27 @@
 
 
 local emptyTable = UPar.emptyTable
+local zero = 1e-2
 
 UPManip = UPManip or {}
 
 local function Log(msg, silentlog)
 	if not silentlog then print(msg) end
+end
+
+local function IsMatrixSingular(mat)
+	-- 这个方法并不严谨, 只是工程化方案, 比直接求逆快很多
+	-- 如果它底层是先算行列式的话
+	local forward = mat:GetForward()
+	local up = mat:GetUp()
+	local right = mat:GetRight()
+
+	return forward:LengthSqr() < zero or up:LengthSqr() < zero
+	or right:LengthSqr() < zero
+end
+
+local function GetInverse(mat)
+	return not IsMatrixSingular(mat) and mat:GetInverse() or nil
 end
 
 local function SetBonePosition(ent, boneId, posw, angw, silentlog) 
@@ -44,20 +60,20 @@ local function SetBonePosition(ent, boneId, posw, angw, silentlog)
 		return false
 	end
 	
-	local parentboneId = ent:GetBoneParent(boneId)
-	local parentTransform = parentboneId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentboneId)
-	if not parentTransform then 
+	local parentId = ent:GetBoneParent(boneId)
+	local parentTransform = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
+	if not parentId or not parentTransform then 
 		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneId "%s" no parent', ent, boneId), silentlog)
 		return false
 	end
 
-	local curTransformInvert = curTransform:GetInverse()
+	local curTransformInvert = GetInverse(curTransform)
 	if not curTransformInvert then 
 		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneId "%s" Matrix is Singular', ent, boneId), silentlog)
 		return false
 	end
 
-	local parentTransformInvert = parentTransform:GetInverse()
+	local parentTransformInvert = GetInverse(parentTransform)
 	if not parentTransformInvert then 
 		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneId "%s" parent Matrix is Singular', ent, boneId), silentlog)
 		return false
@@ -75,6 +91,73 @@ local function SetBonePosition(ent, boneId, posw, angw, silentlog)
 	local newManipPos = parentTransformInvert
 		* (posw - curTransform:GetTranslation() + parentTransform:GetTranslation())
 		+ ent:GetManipulateBonePosition(boneId)
+
+	ent:ManipulateBoneAngles(boneId, newManipAng)
+	ent:ManipulateBonePosition(boneId, newManipPos)
+
+	return newManipAng, newManipPos
+end
+
+local function SetBonePositionLocal(ent, boneId, posl, angl, silentlog) 
+	-- 最好传入非奇异矩阵, 如果骨骼或父级的变换是奇异的, 则可能出现问题
+	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
+	-- 每帧都要更新
+	-- 应该还能再优化
+
+	if not isentity(ent) or not IsValid(ent) then
+		Log(string.format('[UPManip.SetBonePositionLocal]: invaild ent "%s"', ent), silentlog)
+		return
+	end
+	
+	if boneId == -1 then
+		Log('[UPManip.SetBonePositionLocal]: invalid boneId "-1"', silentlog)
+		return false
+	end
+	
+	local curTransform = ent:GetBoneMatrix(boneId)
+	if not curTransform then 
+		Log(string.format('[UPManip.SetBonePositionLocal]: ent "%s" boneId "%s" no Matrix', ent, boneId), silentlog)
+		return false
+	end
+	
+	local parentId = ent:GetBoneParent(boneId)
+	local parentTransform = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
+	if not parentId or not parentTransform then 
+		Log(string.format('[UPManip.SetBonePositionLocal]: ent "%s" boneId "%s" no parent', ent, boneId), silentlog)
+		return false
+	end
+
+	local curTransformInvert = GetInverse(curTransform)
+	if not curTransformInvert then 
+		Log(string.format('[UPManip.SetBonePositionLocal]: ent "%s" boneId "%s" Matrix is Singular', ent, boneId), silentlog)
+		return false
+	end
+
+
+	if IsMatrixSingular(parentTransformInvert) then 
+		Log(string.format('[UPManip.SetBonePositionLocal]: ent "%s" boneId "%s" parent Matrix is Singular', ent, boneId), silentlog)
+		return false
+	end
+
+	local curLocalTransformInvert = curTransformInvert * parentTransform
+
+	local curAngManip = Matrix()
+	curAngManip:SetAngles(ent:GetManipulateBoneAngles(boneId))
+	
+	local curPosManip = Matrix()
+	curPosManip:SetTranslation(ent:GetManipulateBonePosition(boneId))
+
+	local tarMat = Matrix()
+	tarMat:SetAngles(angl)
+	tarMat:SetTranslation(posl)
+
+
+	local newAngManip = curAngManip * curLocalTransformInvert * tarMat
+	local newPosManip = tarMat * curLocalTransformInvert * curPosManip
+
+	local newManipAng = newAngManip:GetAngles()
+	local newManipPos = newPosManip:GetTranslation()
+
 
 	ent:ManipulateBoneAngles(boneId, newManipAng)
 	ent:ManipulateBonePosition(boneId, newManipPos)
@@ -191,8 +274,11 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 end
 
 UPManip.SetBonePosition = SetBonePosition
+UPManip.SetBonePositionLocal = SetBonePositionLocal
 UPManip.UnpackBMData = UnpackBMData
 UPManip.GetEntBonesFamilyLevel = GetEntBonesFamilyLevel
+UPManip.IsMatrixSingular = IsMatrixSingular
+
 UPManip.LerpBoneWorld = function(t, ent, target, boneMapping, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
@@ -252,6 +338,96 @@ UPManip.LerpBoneWorld = function(t, ent, target, boneMapping, silentlog)
 		SetBonePosition(ent, boneId, newPos, newAng, silentlog)
 	end
 end
+
+
+local function GetBoneLocalMatrix(ent, boneId, parentId, invert)
+	local boneMatrix = ent:GetBoneMatrix(boneId)
+	if not boneMatrix then return false end
+
+	parentId = parentId or ent:GetBoneParent(boneId)
+	local parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
+	if not parentId or not parentMatrix then return false end
+
+	if invert then
+		if IsMatrixSingular(parentMatrix) then return false end
+		local boneMatrixInvert = GetInverse(boneMatrix)
+		if not boneMatrixInvert then return false end
+		return boneMatrixInvert * parentMatrix, parentId
+	else
+		if IsMatrixSingular(boneMatrix) then return false end
+		local parentMatrixInvert = GetInverse(boneMatrix)
+		if not parentMatrixInvert then return false end
+		return parentMatrixInvert * boneMatrix, parentId
+	end
+end
+
+
+UPManip.LerpBoneLocal = function(t, ent, target, boneMapping, silentlog)
+	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
+	-- 每帧都要更新
+	local main = boneMapping.main
+	local keySort = boneMapping.keySort
+ 
+	if main['self'] then
+		local offsetMatrix = istable(main['self']) and main['self'].offset or nil
+		local targetMatrix = offsetMatrix and target:GetWorldTransformMatrix() * offsetMatrix or target:GetWorldTransformMatrix()
+		local pos, ang = targetMatrix:GetTranslation(), targetMatrix:GetAngles()
+		ent:SetPos(LerpVector(t, ent:GetPos(), pos))
+		ent:SetAngles(LerpAngle(t, ent:GetAngles(), ang))
+	end
+
+	for _, boneName in ipairs(keySort) do
+		if boneName == 'self' then
+			continue
+		end
+
+		local mappingData = main[boneName]
+		local boneId = ent:LookupBone(boneName)
+		
+		if not boneId or not mappingData then 
+			Log(string.format('[UPManip.LerpBoneLocal]: can not find (boneId or mappingData), boneName: "%s", ent "%s"', boneName, ent), silentlog)
+			continue
+		end
+
+		local targetBoneName = istable(mappingData) and (mappingData.boneName or boneName) or boneName
+		local targetBoneId = target:LookupBone(targetBoneName)
+
+		if not targetBoneId then 
+			Log(string.format('[UPManip.LerpBoneLocal]: can not find targetBoneId, boneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			continue 
+		end
+
+		local parentId = ent:GetBoneParent(boneId)
+		local targetParentId = parentId == -1 and -1 or istable(main[ent:GetBoneName(parentId)]) and 
+
+		local initMatrix = GetBoneLocalMatrix(ent, boneId, parentId)
+		if not initMatrix then
+			Log(string.format('[UPManip.LerpBoneLocal]: get local matrix failed, boneName: "%s", ent "%s"', boneName, ent), silentlog)
+			continue
+		end
+
+		local parentName = parentId == -1 and 'self' or ent:GetBoneName(parentId)
+
+
+		local finalMatrix = target:GetBoneMatrix(targetBoneId)
+		if not finalMatrix then 
+			Log(string.format('[UPManip.LerpBoneLocal]: fail to get targetBoneMatrix, boneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			continue
+		end
+			
+		local offsetMatrix = istable(mappingData) and mappingData.offset or nil
+
+		finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
+
+		local newPos = LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation())
+		local newAng = LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles())
+		local newScale = LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale())
+
+		ent:ManipulateBoneScale(boneId, newScale)
+		SetBonePosition(ent, boneId, newPos, newAng, silentlog)
+	end
+end
+
 
 concommand.Add('upmanip_test', function(ply)
 	local pos = ply:GetPos()
