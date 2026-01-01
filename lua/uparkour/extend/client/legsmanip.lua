@@ -322,10 +322,10 @@ hook.Add('UPExtFakeLegsFirstRender', 'StartLegsManip', function(anim, LegsManipE
 
 	local animData = VMLegs:GetAnim(anim)
 	local fadeInSpeed = istable(animData) and animData.lerp_speed_in
-	fadeInSpeed = math.max(isnumber(fadeInSpeed) and fadeInSpeed or 0.5, 0.5)
+	fadeInSpeed = math.max(isnumber(fadeInSpeed) and fadeInSpeed or 0.1, 0.01)
 
 	local fadeOutSpeed = istable(animData) and animData.lerp_speed_out
-	fadeOutSpeed = math.max(isnumber(fadeOutSpeed) and fadeOutSpeed or 0.5, 0.5)
+	fadeOutSpeed = math.max(isnumber(fadeOutSpeed) and fadeOutSpeed or 0.1, 0.01)
 
 	local fadeInTarget = VMLegs.LegParent
 	local fadeOutTarget = g_FakeGmodLegs3.LegEnt

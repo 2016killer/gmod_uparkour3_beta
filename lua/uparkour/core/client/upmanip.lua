@@ -273,6 +273,35 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 	end
 end
 
+local function __internal_GetBoneMatrix(ent, boneName)
+	local boneId = ent:LookupBone(boneName)
+
+
+end
+
+local function __internal_GetBoneLocalMatrix(ent, boneId, parentId, invert)
+	if boneId == -1 then return ent:GetWorldTransformMatrix() end
+	local boneMatrix = ent:GetBoneMatrix(boneId)
+	if not boneMatrix then return false end
+
+	parentId = parentId or ent:GetBoneParent(boneId)
+	local parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
+	if not parentId or not parentMatrix then return false end
+
+	if invert then
+		if IsMatrixSingular(parentMatrix) then return false end
+		local boneMatrixInvert = GetInverse(boneMatrix)
+		if not boneMatrixInvert then return false end
+		return boneMatrixInvert * parentMatrix, parentId
+	else
+		if IsMatrixSingular(boneMatrix) then return false end
+		local parentMatrixInvert = GetInverse(boneMatrix)
+		if not parentMatrixInvert then return false end
+		return parentMatrixInvert * boneMatrix, parentId
+	end
+end
+
+
 UPManip.SetBonePosition = SetBonePosition
 UPManip.SetBonePositionLocal = SetBonePositionLocal
 UPManip.UnpackBMData = UnpackBMData
@@ -340,25 +369,73 @@ UPManip.LerpBoneWorld = function(t, ent, target, boneMapping, silentlog)
 end
 
 
-local function GetBoneLocalMatrix(ent, boneId, parentId, invert)
-	local boneMatrix = ent:GetBoneMatrix(boneId)
-	if not boneMatrix then return false end
 
-	parentId = parentId or ent:GetBoneParent(boneId)
-	local parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
-	if not parentId or not parentMatrix then return false end
 
-	if invert then
-		if IsMatrixSingular(parentMatrix) then return false end
-		local boneMatrixInvert = GetInverse(boneMatrix)
-		if not boneMatrixInvert then return false end
-		return boneMatrixInvert * parentMatrix, parentId
-	else
-		if IsMatrixSingular(boneMatrix) then return false end
-		local parentMatrixInvert = GetInverse(boneMatrix)
-		if not parentMatrixInvert then return false end
-		return parentMatrixInvert * boneMatrix, parentId
+local function LerpBoneWorld(t, ent, tarEnt, boneName, mapping, silentlog)
+	-- 在调用前最好使用 ent:SetupBones(), 否则可能更新错误
+	-- 每帧都要更新
+	local main = boneMapping.main
+	local keySort = boneMapping.keySort
+ 
+	if main['self'] then
+		local offsetMatrix = istable(main['self']) and main['self'].offset or nil
+		local targetMatrix = offsetMatrix and target:GetWorldTransformMatrix() * offsetMatrix or target:GetWorldTransformMatrix()
+		local pos, ang = targetMatrix:GetTranslation(), targetMatrix:GetAngles()
+		ent:SetPos(LerpVector(t, ent:GetPos(), pos))
+		ent:SetAngles(LerpAngle(t, ent:GetAngles(), ang))
 	end
+
+	for _, boneName in ipairs(keySort) do
+		if boneName == 'self' then
+			continue
+		end
+
+		local mappingData = main[boneName]
+		local boneId = ent:LookupBone(boneName)
+		
+		if not boneId or not mappingData then 
+			Log(string.format('[UPManip.LerpBoneLocal]: can not find (boneId or mappingData), boneName: "%s", ent "%s"', boneName, ent), silentlog)
+			continue
+		end
+
+		local targetBoneName = istable(mappingData) and (mappingData.boneName or boneName) or boneName
+		local targetBoneId = target:LookupBone(targetBoneName)
+
+		if not targetBoneId then 
+			Log(string.format('[UPManip.LerpBoneLocal]: can not find targetBoneId, boneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			continue 
+		end
+
+		local parentId = ent:GetBoneParent(boneId)
+		local targetParentId = parentId == -1 and -1 or istable(main[ent:GetBoneName(parentId)]) and 
+
+		local initMatrix = GetBoneLocalMatrix(ent, boneId, parentId)
+		if not initMatrix then
+			Log(string.format('[UPManip.LerpBoneLocal]: get local matrix failed, boneName: "%s", ent "%s"', boneName, ent), silentlog)
+			continue
+		end
+
+		local parentName = parentId == -1 and 'self' or ent:GetBoneName(parentId)
+
+
+		local finalMatrix = target:GetBoneMatrix(targetBoneId)
+		if not finalMatrix then 
+			Log(string.format('[UPManip.LerpBoneLocal]: fail to get targetBoneMatrix, boneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			continue
+		end
+			
+		local offsetMatrix = istable(mappingData) and mappingData.offset or nil
+
+		finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
+
+		local newPos = LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation())
+		local newAng = LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles())
+		local newScale = LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale())
+
+		ent:ManipulateBoneScale(boneId, newScale)
+		SetBonePosition(ent, boneId, newPos, newAng, silentlog)
+	end
+
 end
 
 
