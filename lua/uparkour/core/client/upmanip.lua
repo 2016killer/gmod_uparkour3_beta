@@ -144,16 +144,17 @@ local function GetEntBonesFamilyLevel(ent, useLRU2)
 	return familyLevel
 end
 
-local function InitBoneMappingOffset(boneMapping)
+UPManip.InitBoneMappingOffset = function(boneMapping)
 	-- 主要是验证参数类型和初始化偏移矩阵
 	assert(istable(boneMapping), string.format('invalid boneMapping, expect table, got %s', type(boneMapping)))
 	assert(istable(boneMapping.main), string.format('invalid boneMapping.main, expect table, got %s', type(boneMapping.main)))
-	
+	assert(istable(boneMapping.keySort), string.format('invalid boneMapping.keySort, expect table, got %s', type(boneMapping.keySort)))
+
 	for key, val in pairs(boneMapping.main) do
 		assert(isstring(key), string.format('boneMapping.main key is invalid, expect string, got %s', type(key)))
-		assert(istable(val), string.format('boneMapping.main value is invalid, expect table, got %s', type(val)))
+		assert(istable(val) or val == true, string.format('boneMapping.main value is invalid, expect (table or true), got %s', type(val)))
 
-		if ismatrix(val.offset) then
+		if val == true or ismatrix(val.offset) then
 			continue
 		end
 
@@ -184,7 +185,7 @@ local function InitBoneMappingOffset(boneMapping)
 		end
 
 		if offsetMatrix then
-			boneMapping[key].offset = offsetMatrix
+			val.offset = offsetMatrix
 		end
 	end
 end
@@ -192,17 +193,23 @@ end
 UPManip.SetBonePosition = SetBonePosition
 UPManip.UnpackBMData = UnpackBMData
 UPManip.GetEntBonesFamilyLevel = GetEntBonesFamilyLevel
-
-
-function UPManip:LerpBoneWorld(t, ent, target, boneMapping, silentlog)
+UPManip.LerpBoneWorld = function(t, ent, target, boneMapping, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 	local main = boneMapping.main
 	local keySort = boneMapping.keySort
-	for _, boneName in pairs(keySort) do
+ 
+	if main['self'] then
+		local offsetMatrix = istable(main['self']) and main['self'].offset or nil
+		local targetMatrix = offsetMatrix and target:GetWorldTransformMatrix() * offsetMatrix or target:GetWorldTransformMatrix()
+		local pos, ang = targetMatrix:GetTranslation(), targetMatrix:GetAngles()
+		ent:SetPos(LerpVector(t, ent:GetPos(), pos))
+		ent:SetAngles(LerpAngle(t, ent:GetAngles(), ang))
+	end
+
+	for _, boneName in ipairs(keySort) do
 		if boneName == 'self' then
-			ent:SetPos(LerpVector(t, ent:GetPos(), target:GetPos()))
-			ent:SetAngles(LerpAngle(t, ent:GetAngles(), target:GetAngles()))
+			continue
 		end
 
 		local mappingData = main[boneName]
@@ -219,7 +226,7 @@ function UPManip:LerpBoneWorld(t, ent, target, boneMapping, silentlog)
 			continue
 		end
 
-		local targetBoneName = mappingData.boneName or boneName
+		local targetBoneName = istable(mappingData) and (mappingData.boneName or boneName) or boneName
 		local targetBoneId = target:LookupBone(targetBoneName)
 
 		if not targetBoneId then 
@@ -233,7 +240,7 @@ function UPManip:LerpBoneWorld(t, ent, target, boneMapping, silentlog)
 			continue
 		end
 			
-		local offsetMatrix = mappingData.offset
+		local offsetMatrix = istable(mappingData) and mappingData.offset or nil
 
 		finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
 
@@ -245,3 +252,47 @@ function UPManip:LerpBoneWorld(t, ent, target, boneMapping, silentlog)
 		SetBonePosition(ent, boneId, newPos, newAng)
 	end
 end
+
+concommand.Add('upmanip_test', function(ply)
+	local pos = ply:GetPos()
+	pos = pos + UPar.XYNormal(ply:GetAimVector()) * 100
+
+	local mossman = ClientsideModel('models/mossman.mdl', RENDERGROUP_OTHER)
+	local mossman2 = ClientsideModel('models/mossman.mdl', RENDERGROUP_OTHER)
+
+	mossman:SetPos(pos)
+	mossman2:SetPos(pos)
+
+	local boneMapping = {
+		main = {
+			['self'] = {ang = Angle(90, 0, 0)},
+			['ValveBiped.Bip01_Head1'] = {ang = Angle(90, 0, 0)}
+		},
+		keySort = {
+			'self', 
+			'ValveBiped.Bip01_Head1'
+		},
+	}
+	UPManip.InitBoneMappingOffset(boneMapping)
+
+	mossman:SetupBones()
+	mossman2:SetupBones()
+
+	local ang = 0
+	timer.Create('upmanip_test', 0, 0, function()
+		mossman2:SetPos(pos + Vector(math.cos(ang) * 100, math.sin(ang) * 100, 0))
+		mossman2:SetupBones()
+		mossman:SetupBones()
+
+		UPManip.LerpBoneWorld(0.1, mossman, mossman2, boneMapping)
+		
+		ang = ang + FrameTime()
+	end)
+
+	timer.Simple(5, function()
+		timer.Remove('upmanip_test')
+		if IsValid(mossman) then mossman:Remove() end
+		if IsValid(mossman2) then mossman2:Remove() end
+	end)
+end)
+

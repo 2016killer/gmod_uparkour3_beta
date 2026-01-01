@@ -16,6 +16,9 @@
 <a href="./FRAMELOOP.md">帧循环</a>  
 
 # UPManip 骨骼操纵
+
+使用控制台指令 `upmanip_test` 可以看到演示效果。
+
 ```note
 注意: 这是一个测试性模块, 不建议在生产环境中使用。
 

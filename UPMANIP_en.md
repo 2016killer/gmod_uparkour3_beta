@@ -16,6 +16,9 @@
 <a href="./FRAMELOOP_en.md">FrameLoop</a>  
 
 # UPManip - Bone Manipulation
+
+example command `upmanip_test`
+
 ```note
 Note: This is a test module and is not recommended for use in a production environment.
 
