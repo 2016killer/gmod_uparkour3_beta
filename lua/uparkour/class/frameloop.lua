@@ -115,9 +115,9 @@ end
 UPar.PushFrameLoop = function(identity, iterator, addition, timeout, clear, hookName)
 	assert(isfunction(iterator), 'iterator must be a function.')
 	assert(identity ~= nil, 'identity must be a valid value.')
-	assert(isnumber(timeout), 'timeout must be a number.')
 	assert(isstring(hookName) or hookName == nil, 'hookName must be a string or nil.')
 	assert(isfunction(clear) or clear == nil, 'clear must be a function or nil.')
+	timeout = isnumber(timeout) and timeout or 5
 
 	-- 默认 Think 帧循环
 	hookName = hookName or DEFAULT_HOOK_NAME

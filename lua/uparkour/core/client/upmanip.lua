@@ -6,8 +6,11 @@
 	所以如果想完成正确插值的话, 则必须在位置更新完成的那一帧, 
 	所以想要完成正确插值, 最好单独加一个标志 + 回调来处理, 这样不容易导致混乱。
 
-	插值需要指定骨骼映射和其排序, 排序可以用 
-	UPManip:GetBoneMappingKeysSorted(ent, boneMapping, useLRU2) 来获取再手动编码。
+	由于这些函数常常在帧循环中, 加上计算略显密集, 所以很多的错误都是无声的, 这极大
+	地增加了调试难度, 有点像GPU编程, 操, 所以我并不推荐使用这些。
+
+	插值需要指定骨骼映射和其排序, GetEntBonesFamilyLevel(ent, useLRU2) 可以辅助排序,
+	完成后再手动编码。
 --]]
 
 
@@ -15,44 +18,48 @@ local emptyTable = UPar.emptyTable
 
 UPManip = UPManip or {}
 
-local function SetBonePosition(ent, boneId, posw, angw) 
+local function Log(msg, silentlog)
+	if not silentlog then print(msg) end
+end
+
+local function SetBonePosition(ent, boneId, posw, angw, silentlog) 
 	-- 最好传入非奇异矩阵, 如果骨骼或父级的变换是奇异的, 则可能出现问题
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 	-- 应该还能再优化
 
 	if not isentity(ent) or not IsValid(ent) then
-		print(string.format('[UPManip.SetBonePosition]: invaild ent "%s"', ent))
+		Log(string.format('[UPManip.SetBonePosition]: invaild ent "%s"', ent), silentlog)
 		return
 	end
 	
 	if boneId == -1 then
-		print('[SetBonePosition]: invalid boneId "-1"')
+		Log('[UPManip.SetBonePosition]: invalid boneId "-1"', silentlog)
 		return false
 	end
 	
 	local curTransform = ent:GetBoneMatrix(boneId)
 	if not curTransform then 
-		// string.format('[SetBonePosition]: ent "%s" boneId "%s" no Matrix', ent, boneId)
+		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneId "%s" no Matrix', ent, boneId), silentlog)
 		return false
 	end
 	
 	local parentboneId = ent:GetBoneParent(boneId)
 	local parentTransform = parentboneId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentboneId)
 	if not parentTransform then 
-		// string.format('[SetBonePosition]: ent "%s" boneId "%s" no parent', ent, boneId)
+		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneId "%s" no parent', ent, boneId), silentlog)
 		return false
 	end
 
 	local curTransformInvert = curTransform:GetInverse()
 	if not curTransformInvert then 
-		// print(string.format('[SetBonePosition]: ent "%s" boneId "%s" Matrix is Singular', ent, boneId))
+		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneId "%s" Matrix is Singular', ent, boneId), silentlog)
 		return false
 	end
 
 	local parentTransformInvert = parentTransform:GetInverse()
 	if not parentTransformInvert then 
-		// print(string.format('[SetBonePosition]: ent "%s" boneId "%s" parent Matrix is Singular', ent, boneId))
+		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneId "%s" parent Matrix is Singular', ent, boneId), silentlog)
 		return false
 	end
 
@@ -75,40 +82,6 @@ local function SetBonePosition(ent, boneId, posw, angw)
 	return newManipAng, newManipPos
 end
 
-local function UnpackBMData(bmdata)
-	-- 返回 骨骼名称, 偏移矩阵
-	
-	if istable(bmdata) then 
-		local boneName = isstring(bmdata.boneName) and bmdata.boneName or nil
-		
-		local offsetMatrix = nil
-		local offsetAng = bmdata.ang
-		local offsetPos = bmdata.pos
-		local offsetScale = bmdata.scale
-
-		if isangle(offsetAng) then
-			offsetMatrix = offsetMatrix or Matrix()
-			offsetMatrix:SetAngles(offsetAng)
-		end
-
-		if isvector(offsetPos) then
-			offsetMatrix = offsetMatrix or Matrix()
-			offsetMatrix:SetTranslation(offsetPos)
-		end
-
-		if isvector(offsetScale) then
-			offsetMatrix = offsetMatrix or Matrix()
-			offsetMatrix:SetScale(offsetScale)
-		end
-
-		return boneName, offsetMatrix
-	elseif isstring(bmdata) then 
-		return bmdata, nil
-	else
-		return nil, nil
-	end
-end
-
 local function MarkBoneFamilyLevel(boneId, currentLevel, family, familyLevel, cached)
 	cached = cached or {}
 
@@ -129,9 +102,9 @@ local function MarkBoneFamilyLevel(boneId, currentLevel, family, familyLevel, ca
 	end
 end
 
-local function GetBonesFamilyLevel(ent, useLRU2)
+local function GetEntBonesFamilyLevel(ent, useLRU2)
 	if not isentity(ent) or not IsValid(ent) or not ent:GetModel() then
-		print(string.format('[UPManip.GetBonesFamilyLevel]: invaild ent "%s"', ent))
+		print(string.format('[UPManip.GetEntBonesFamilyLevel]: invaild ent "%s"', ent))
 		return
 	end
 
@@ -158,7 +131,7 @@ local function GetBonesFamilyLevel(ent, useLRU2)
     end
 
 	if not family[-1] then
-		print(string.format('[UPManip.GetBonesFamilyLevel]: ent "%s" no root bone', ent))
+		print(string.format('[UPManip.GetEntBonesFamilyLevel]: ent "%s" no root bone', ent))
 		return
 	end
 
@@ -171,142 +144,102 @@ local function GetBonesFamilyLevel(ent, useLRU2)
 	return familyLevel
 end
 
-local function GetBoneMappingKeysSorted(ent, boneMapping, useLRU2)
-	local keys = {}
+local function InitBoneMappingOffset(boneMapping)
+	-- 主要是验证参数类型和初始化偏移矩阵
+	assert(istable(boneMapping), string.format('invalid boneMapping, expect table, got %s', type(boneMapping)))
+	assert(istable(boneMapping.main), string.format('invalid boneMapping.main, expect table, got %s', type(boneMapping.main)))
+	
+	for key, val in pairs(boneMapping.main) do
+		assert(isstring(key), string.format('boneMapping.main key is invalid, expect string, got %s', type(key)))
+		assert(istable(val), string.format('boneMapping.main value is invalid, expect table, got %s', type(val)))
 
-    for boneName, _ in pairs(boneMapping) do 
-		local boneId = ent:LookupBone(boneName)
-		if not boneId then continue end
-		table.insert(keys, boneName) 
+		if ismatrix(val.offset) then
+			continue
+		end
+
+		local offsetMatrix = nil
+		local offsetAng = val.ang
+		local offsetPos = val.pos
+		local offsetScale = val.scale
+		local targetBoneName = val.boneName
+
+		assert(isstring(targetBoneName) or targetBoneName == nil, string.format('boneName is invalid, expect (string or nil), got %s', type(targetBoneName)))
+		assert(isangle(offsetAng) or offsetAng == nil, string.format('ang is invalid, expect (angle or nil), got %s', type(offsetAng)))
+		assert(isvector(offsetPos) or offsetPos == nil, string.format('pos is invalid, expect (vector or nil), got %s', type(offsetPos)))
+		assert(isvector(offsetScale) or offsetScale == nil, string.format('scale is invalid, expect (vector or nil), got %s', type(offsetScale)))
+
+		if isangle(offsetAng) then
+			offsetMatrix = offsetMatrix or Matrix()
+			offsetMatrix:SetAngles(offsetAng)
+		end
+
+		if isvector(offsetPos) then
+			offsetMatrix = offsetMatrix or Matrix()
+			offsetMatrix:SetTranslation(offsetPos)
+		end
+
+		if isvector(offsetScale) then
+			offsetMatrix = offsetMatrix or Matrix()
+			offsetMatrix:SetScale(offsetScale)
+		end
+
+		if offsetMatrix then
+			boneMapping[key].offset = offsetMatrix
+		end
 	end
-
-	local familyLevel = GetBonesFamilyLevel(ent, useLRU2)
-	if not familyLevel then
-		print(string.format('[UPManip.GetBoneMappingKeysSorted]: ent "%s" no family level', ent))
-		return
-	end
-
-    table.sort(keys, function(a, b)
-		local boneIdA = ent:LookupBone(a)
-		local boneIdB = ent:LookupBone(b)
-
-        local levelA = familyLevel[boneIdA] or 999
-        local levelB = familyLevel[boneIdB] or 999
-
-        if levelA ~= levelB then
-            return levelA < levelB
-        end
-
-        return boneIdA < boneIdB
-    end)
-
-	return keys
 end
-
 
 UPManip.SetBonePosition = SetBonePosition
 UPManip.UnpackBMData = UnpackBMData
-UPManip.GetBoneMappingKeysSorted = GetBoneMappingKeysSorted
-UPManip.GetBonesFamilyLevel = GetBonesFamilyLevel
-UPManip.BoneMappingCollect = UPManip.BoneMappingCollect or {}
-UPManip.BoneKeysCollect = UPManip.BoneKeysCollect or {}
+UPManip.GetEntBonesFamilyLevel = GetEntBonesFamilyLevel
 
 
-function UPManip:GetBoneKeys(boneKeys)
-	assert(isstring(boneKeys) or istable(boneKeys), 'boneKeys must be string or table')
-	
-	if isstring(boneKeys) then
-		local name = boneKeys
-		boneKeys = self.BoneKeysCollect[name]
-
-		if not istable(boneKeys) then
-			print(string.format('[UPManip.GetBoneKeys]: can not find boneKeys named "%s"', name))
-			return emptyTable
-		end
-	end
-
-	if table.IsEmpty(boneKeys) then
-		print('[UPManip.GetBoneKeys]: boneKeys is empty')
-	end
-
-	return boneKeys
-end
-
-function UPManip:GetBoneMapping(boneMapping)
-	assert(isstring(boneMapping) or istable(boneMapping), 'boneMapping must be string or table')
-	
-	if isstring(boneMapping) then
-		local name = boneMapping
-		boneMapping = self.BoneMappingCollect[name]
-
-		if not istable(boneMapping) then
-			print(string.format('[UPManip.GetBoneMapping]: can not find boneMapping named "%s"', name))
-			return emptyTable
-		end
-	end
-
-	if table.IsEmpty(boneMapping) then
-		print('[UPManip.GetBoneMapping]: boneMapping is empty')
-	end
-
-	return boneMapping
-end
-
-function UPManip:Snapshot(ent, boneMapping)
-	local snapshot = {}
-	boneMapping = self:GetBoneMapping(boneMapping)
-
-	for boneName, _ in pairs(boneMapping) do
-		local boneId = ent:LookupBone(boneName)
-		if not boneId then continue end
-		local boneMat = ent:GetBoneMatrix(boneId)
-		if not boneMat then continue end
-		snapshot[boneName] = {
-			boneMat:GetTranslation(),
-			boneMat:GetAngles(),
-			boneMat:GetScale(),
-		}
-	end
-	
-	return snapshot
-end
-
-
-function UPManip:LerpBoneWorld(ent, t, snapshot, tarEnt, boneMapping, boneKeys)
+function UPManip:LerpBoneWorld(t, ent, target, boneMapping, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
-	boneKeys = self:GetBoneKeys(boneKeys)
-	boneMapping = self:GetBoneMapping(boneMapping)
-	
-	for i, boneName in pairs(boneKeys) do
-		local data = boneMapping[boneName]
+	local main = boneMapping.main
+	local keySort = boneMapping.keySort
+	for _, boneName in pairs(keySort) do
+		if boneName == 'self' then
+			ent:SetPos(LerpVector(t, ent:GetPos(), target:GetPos()))
+			ent:SetAngles(LerpAngle(t, ent:GetAngles(), target:GetAngles()))
+		end
+
+		local mappingData = main[boneName]
 		local boneId = ent:LookupBone(boneName)
 		
-		if not boneId or not snapshot[boneName] then 
+		if not boneId or not mappingData then 
+			Log(string.format('[UPManip.LerpBoneWorld]: can not find (boneId or mappingData), boneName: "%s", ent "%s"', boneName, ent), silentlog)
 			continue
 		end
 
-		local curPos, curAng, curScale = unpack(snapshot[boneName])
-
-		local tarEntBoneName, offsetMatrix = UnpackBMData(data)
-		local tarEntBoneId = tarEnt:LookupBone(tarEntBoneName or boneName)
-
-		if not tarEntBoneId then 
+		local initMatrix = ent:GetBoneMatrix(boneId)
+		if not initMatrix then 
+			Log(string.format('[UPManip.LerpBoneWorld]: fail to get boneMatrix, boneName: "%s", ent "%s"', boneName, ent), silentlog)
 			continue
 		end
-		
-		local tarEntMatrix = tarEnt:GetBoneMatrix(tarEntBoneId)
-		if not tarEntMatrix then 
-			continue
-		end
-		
-		if offsetMatrix then
-			tarEntMatrix = tarEntMatrix * offsetMatrix
+
+		local targetBoneName = mappingData.boneName or boneName
+		local targetBoneId = target:LookupBone(targetBoneName)
+
+		if not targetBoneId then 
+			Log(string.format('[UPManip.LerpBoneWorld]: can not find targetBoneId, targetBoneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			continue 
 		end
 
-		local newPos = LerpVector(t, curPos, tarEntMatrix:GetTranslation())
-		local newAng = LerpAngle(t, curAng, tarEntMatrix:GetAngles())
-		local newScale = LerpVector(t, curScale, tarEntMatrix:GetScale())
+		local finalMatrix = target:GetBoneMatrix(targetBoneId)
+		if not finalMatrix then 
+			Log(string.format('[UPManip.LerpBoneWorld]: fail to get targetBoneMatrix, targetBoneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			continue
+		end
+			
+		local offsetMatrix = mappingData.offset
+
+		finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
+
+		local newPos = LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation())
+		local newAng = LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles())
+		local newScale = LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale())
 
 		ent:ManipulateBoneScale(boneId, newScale)
 		SetBonePosition(ent, boneId, newPos, newAng)

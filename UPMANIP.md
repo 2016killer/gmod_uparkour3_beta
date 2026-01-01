@@ -25,7 +25,14 @@
 所以如果想完成正确插值的话, 则必须在位置更新完成的那一帧, 
 所以想要完成正确插值, 最好单独加一个标志 + 回调来处理, 这样不容易导致混乱。
 
-插值需要指定骨骼映射及其顺序。顺序可以通过使用函数 UPManip:GetBoneMappingKeysSorted（ent, boneMapping, useLRU2）来获取，然后进行手动编码。
+由于这些函数常常在帧循环中, 加上计算略显密集, 所以很多的错误都是无声的, 这极大
+地增加了调试难度, 有点像GPU编程, 操, 所以我并不推荐使用这些。
+
+插值需要指定骨骼映射和其排序, GetEntBonesFamilyLevel(ent, useLRU2) 可以辅助排序,
+完成后再手动编码。
+
+我决定在一些函数末尾加上一个 silentlog 参数, 用于控制是否打印日志, 这会让调试
+起来更加方便。
 
 ```
 
@@ -47,7 +54,7 @@
 ## 可用方法
 
 ![client](./materials/upgui/client.jpg)
-**vec**, **ang** UPManip.SetBonePosition(**entity** ent, **int** boneId, **vector** posw, **angle** angw)
+**vec**, **ang** UPManip.SetBonePosition(**entity** ent, **int** boneId, **vector** posw, **angle** angw, **bool** silentlog)
 ```note
 控制指定实体的指定骨骼的位置和角度, 新的位置不能距离旧位置太远 (128个单位)
 最好在调用之前使用 ent:SetupBones(), 因为计算中需要当前骨骼矩阵。

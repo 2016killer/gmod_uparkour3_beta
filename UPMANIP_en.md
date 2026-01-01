@@ -25,8 +25,11 @@ The usage threshold of this method is extremely high. Firstly, ManipulateBonePos
 Therefore, if one wants to achieve correct interpolation, it is necessary to do so at the frame where the position update is completed.
 So, to achieve correct interpolation, it is best to add an additional flag + callback to handle it. This way, it is less likely to cause confusion.
 
-Interpolation requires specifying the bone mapping and its order. The order can be obtained by using the function UPManip:GetBoneMappingKeysSorted(ent, boneMapping, useLRU2) and then manually encoded.
+Interpolation requires specifying the bone mapping and its order. The function GetEntBonesFamilyLevel(ent, useLRU2) can assist in sorting. After the process is completed, manual coding is required.
 
+Since these functions are often used in frame loops and are somewhat computationally intensive, many errors are silent — which greatly increases debugging difficulty. fuck, it's a bit like GPU programming, so I don't recommend using them.
+
+I decided to add a "silentlog" parameter at the end of some functions, which is used to control whether to print logs. This will make debugging much more convenient.
 ```
 
 
@@ -48,7 +51,7 @@ This is a **client-side only** API that provides direct control over bones via m
 ## Available Methods
 
 ![client](./materials/upgui/client.jpg)
-**vec, ang** UPManip.SetBonePosition(**entity** ent, **int** boneId, **vector** posw, **angle** angw)
+**vec, ang** UPManip.SetBonePosition(**entity** ent, **int** boneId, **vector** posw, **angle** angw, **bool** silentlog)
 ```note
 Controls the position and angle of the specified bone of the target entity.
 The new position cannot be too far from the old position (128 units maximum).
