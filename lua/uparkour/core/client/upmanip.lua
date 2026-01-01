@@ -230,13 +230,13 @@ UPManip.LerpBoneWorld = function(t, ent, target, boneMapping, silentlog)
 		local targetBoneId = target:LookupBone(targetBoneName)
 
 		if not targetBoneId then 
-			Log(string.format('[UPManip.LerpBoneWorld]: can not find targetBoneId, targetBoneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			Log(string.format('[UPManip.LerpBoneWorld]: can not find targetBoneId, boneName: "%s", target "%s"', targetBoneName, target), silentlog)
 			continue 
 		end
 
 		local finalMatrix = target:GetBoneMatrix(targetBoneId)
 		if not finalMatrix then 
-			Log(string.format('[UPManip.LerpBoneWorld]: fail to get targetBoneMatrix, targetBoneName: "%s", target "%s"', targetBoneName, target), silentlog)
+			Log(string.format('[UPManip.LerpBoneWorld]: fail to get targetBoneMatrix, boneName: "%s", target "%s"', targetBoneName, target), silentlog)
 			continue
 		end
 			
@@ -249,7 +249,7 @@ UPManip.LerpBoneWorld = function(t, ent, target, boneMapping, silentlog)
 		local newScale = LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale())
 
 		ent:ManipulateBoneScale(boneId, newScale)
-		SetBonePosition(ent, boneId, newPos, newAng)
+		SetBonePosition(ent, boneId, newPos, newAng, silentlog)
 	end
 end
 
