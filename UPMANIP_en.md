@@ -17,7 +17,7 @@
 
 # UPManip Bone Manipulation
 
-Use the console command `upmanip_test` to see the demo effect.
+Use the console command `upmanip_test_world` or `upmanip_test_local` to see the demo effect.
 
 ```note
 
@@ -150,7 +150,7 @@ Returns true if the matrix is singular and cannot be used for subsequent inverse
 
 ![client](./materials/upgui/client.jpg)
 
-**angle**, **vector** UPManip.LerpBoneWorld(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName,**matrix** offsetMatrix, **bool** silentlog)
+**angle**, **vector**, **vector** UPManip.LerpBoneWorld(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName,**matrix** offsetMatrix, **bool** silentlog)
 
 ```note
 
@@ -164,7 +164,7 @@ Requires updating every frame. It's recommended to execute ent:SetupBones() and 
 
 ![client](./materials/upgui/client.jpg)
 
-**angle**, **vector** UPManip.LerpBoneLocal(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName, **string** parentName, **string** tarParentName, **matrix** offsetMatrix, **bool** silentlog)
+**angle**, **vector**, **vector** UPManip.LerpBoneLocal(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName, **string** parentName, **string** tarParentName, **matrix** offsetMatrix, **bool** silentlog)
 
 ```note
 

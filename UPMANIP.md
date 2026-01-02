@@ -17,7 +17,7 @@
 
 # UPManip 骨骼操纵
 
-使用控制台指令 `upmanip_test` 可以看到演示效果。
+使用控制台指令 `upmanip_test_world` 或 `upmanip_test_local` 可以看到演示效果。
 
 ```note
 注意: 这是一个测试性模块, 不建议在生产环境中使用。
@@ -116,7 +116,7 @@
 ```
 
 ![client](./materials/upgui/client.jpg)
-**angle**, **vector** UPManip.LerpBoneWorld(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName, **matrix** offsetMatrix, **bool** silentlog)
+**angle**, **vector**, **vector** UPManip.LerpBoneWorld(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName, **matrix** offsetMatrix, **bool** silentlog)
 ```note
 世界空间下骨骼姿态线性插值, 实现当前骨骼向目标骨骼的平滑过渡。
 参数 t: 插值因子（建议0-1, 超出范围会出现过度插值）, 0为当前状态, 1为目标状态。
@@ -126,7 +126,7 @@
 ```
 
 ![client](./materials/upgui/client.jpg)
-**angle**, **vector** UPManip.LerpBoneLocal(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName, **string** parentName, **string** tarParentName, **matrix** offsetMatrix, **bool** silentlog)
+**angle**, **vector**, **vector** UPManip.LerpBoneLocal(**number** t, **entity** ent, **entity** tarEnt, **string** boneName, **string** tarBoneName, **string** parentName, **string** tarParentName, **matrix** offsetMatrix, **bool** silentlog)
 ```note
 局部空间下骨骼姿态线性插值, 相对自定义父级进行平滑过渡, 灵活性更高。
 参数 tarBoneName: 目标实体对应骨骼名, 不指定则与boneName一致。

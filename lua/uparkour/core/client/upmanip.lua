@@ -50,7 +50,7 @@ end
 
 local function GetBoneMatrix(ent, boneName)
 	if boneName == 'self' then
-		return ent:GetWorldTransformMatrix()
+		return ent:GetWorldTransformMatrix(), -1
 	end
 
 	local boneId = ent:LookupBone(boneName)
@@ -119,7 +119,7 @@ local function GetBoneMatrixLocal(ent, boneName, parentName, invert)
 
 	-- 在这里, 我们将实体本身的父级视为 World
 	if boneName == 'self' then 
-		return ent:GetWorldTransformMatrix() 
+		return ent:GetWorldTransformMatrix(), -1, -1
 	end
 
 	local boneId = ent:LookupBone(boneName)
@@ -275,12 +275,13 @@ local function LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix
 
 	tarMatrix = offsetMatrix and tarMatrix * offsetMatrix or tarMatrix
 
+	local newManipScale = LerpVector(t, curMatrix:GetScale(), tarMatrix:GetScale())
+	ent:ManipulateBoneScale(boneId, newManipScale)
+
 	local newPos = LerpVector(t, curMatrix:GetTranslation(), tarMatrix:GetTranslation())
 	local newAng = LerpAngle(t, curMatrix:GetAngles(), tarMatrix:GetAngles())
-	local newScale = LerpVector(t, curMatrix:GetScale(), tarMatrix:GetScale())
-
-	ent:ManipulateBoneScale(boneId, newScale)
-	return SetBonePosition(ent, boneName, newPos, newAng, silentlog)
+	local newManipPos, newManipAng = SetBonePosition(ent, boneName, newPos, newAng, silentlog)
+	return newManipPos, newManipAng, newManipScale
 end
 
 local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
@@ -303,12 +304,13 @@ local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, 
 		
 	tarMatrixLocal = offsetMatrix and tarMatrixLocal * offsetMatrix or tarMatrixLocal
 
+	local newManipScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
+	ent:ManipulateBoneScale(boneId, newManipScale)
+
 	local newPos = LerpVector(t, curMatrixLocal:GetTranslation(), tarMatrixLocal:GetTranslation())
 	local newAng = LerpAngle(t, curMatrixLocal:GetAngles(), tarMatrixLocal:GetAngles())
-	local newScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
-
-	ent:ManipulateBoneScale(boneId, newScale)
-	return SetBonePositionLocal(ent, boneName, newPos, newAng, silentlog)
+	local newManipPos, newManipAng = SetBonePositionLocal(ent, boneName, newPos, newAng, silentlog)
+	return newManipPos, newManipAng, newManipScale
 end
 
 UPManip.GetBoneMatrix = GetBoneMatrix
@@ -420,7 +422,7 @@ UPManip.LerpBoneLocalByMapping = function(t, ent, tarEnt, boneMapping, silentlog
 end
 
 
-concommand.Add('upmanip_test', function(ply)
+concommand.Add('upmanip_test_world', function(ply)
 	local pos = ply:GetPos()
 	pos = pos + UPar.XYNormal(ply:GetAimVector()) * 100
 
@@ -446,7 +448,7 @@ concommand.Add('upmanip_test', function(ply)
 	mossman2:SetupBones()
 
 	local ang = 0
-	timer.Create('upmanip_test', 0, 0, function()
+	timer.Create('upmanip_test_world', 0, 0, function()
 		mossman2:SetPos(pos + Vector(math.cos(ang) * 100, math.sin(ang) * 100, 0))
 		mossman2:SetupBones()
 		mossman:SetupBones()
@@ -457,9 +459,82 @@ concommand.Add('upmanip_test', function(ply)
 	end)
 
 	timer.Simple(5, function()
-		timer.Remove('upmanip_test')
+		timer.Remove('upmanip_test_world')
 		if IsValid(mossman) then mossman:Remove() end
 		if IsValid(mossman2) then mossman2:Remove() end
 	end)
 end)
 
+concommand.Add('upmanip_test_local', function(ply)
+	local pos = ply:GetPos()
+	pos = pos + UPar.XYNormal(ply:GetAimVector()) * 100
+
+	local pos2 = pos + Vector(0, 0, 50)
+
+	local mossman = ClientsideModel('models/mossman.mdl', RENDERGROUP_OTHER)
+	local mossman2 = ClientsideModel('models/gman_high.mdl', RENDERGROUP_OTHER)
+
+	mossman:SetPos(pos)
+	
+	mossman2:SetPos(pos2)
+	mossman2:ResetSequenceInfo()
+	mossman2:SetPlaybackRate(1)
+	mossman2:ResetSequence(mossman2:LookupSequence('crouch_reload_pistol'))
+
+
+	local boneMapping = {
+		main = {
+			['ValveBiped.Bip01_Spine1'] = true,
+			['ValveBiped.Bip01_Spine2'] = true,
+			['ValveBiped.Bip01_L_Clavicle'] = true,
+			['ValveBiped.Bip01_L_UpperArm'] = true,
+			['ValveBiped.Bip01_L_Forearm'] = true,
+			['ValveBiped.Bip01_L_Hand'] = true,
+			['ValveBiped.Bip01_R_Clavicle'] = true,
+			['ValveBiped.Bip01_R_UpperArm'] = true,
+			['ValveBiped.Bip01_R_Forearm'] = true,
+			['ValveBiped.Bip01_R_Hand'] = true,
+			['ValveBiped.Bip01_Neck1'] = true,
+			['ValveBiped.Bip01_Head1'] = true,
+		},
+		keySort = {
+			'ValveBiped.Bip01_Spine1',
+			'ValveBiped.Bip01_Spine2',
+			'ValveBiped.Bip01_L_Clavicle',
+			'ValveBiped.Bip01_L_UpperArm',
+			'ValveBiped.Bip01_L_Forearm',
+			'ValveBiped.Bip01_L_Hand',
+			'ValveBiped.Bip01_R_Clavicle',
+			'ValveBiped.Bip01_R_UpperArm',
+			'ValveBiped.Bip01_R_Forearm',
+			'ValveBiped.Bip01_R_Hand',
+			'ValveBiped.Bip01_Neck1',
+			'ValveBiped.Bip01_Head1',
+		},
+	}
+
+	
+	UPManip.InitBoneMappingOffset(boneMapping)
+
+	mossman:SetupBones()
+	mossman2:SetupBones()
+
+	local ang = 0
+	timer.Create('upmanip_test_local', 0, 0, function()
+		mossman2:SetCycle((mossman2:GetCycle() + FrameTime()) % 1)
+		mossman2:SetPos(pos + Vector(math.cos(ang) * 100, math.sin(ang) * 100, 0))
+		mossman2:SetupBones()
+
+
+		mossman:SetupBones()
+		UPManip.LerpBoneLocalByMapping(0.1, mossman, mossman2, boneMapping)
+		
+		ang = ang + FrameTime()
+	end)
+		
+	timer.Simple(5, function()
+		timer.Remove('upmanip_test_local')
+		if IsValid(mossman) then mossman:Remove() end
+		if IsValid(mossman2) then mossman2:Remove() end
+	end)
+end)
