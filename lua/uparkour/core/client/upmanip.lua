@@ -472,7 +472,7 @@ concommand.Add('upmanip_test_local', function(ply)
 	local pos = ply:GetPos()
 	pos = pos + UPar.XYNormal(ply:GetAimVector()) * 100
 
-	local pos2 = pos + Vector(0, 0, 50)
+	local pos2 = pos + Vector(0, 100, 0)
 
 	local mossman = ClientsideModel('models/mossman.mdl', RENDERGROUP_OTHER)
 	local mossman2 = ClientsideModel('models/gman_high.mdl', RENDERGROUP_OTHER)
@@ -527,12 +527,10 @@ concommand.Add('upmanip_test_local', function(ply)
 	local ang = 0
 	timer.Create('upmanip_test_local', 0, 0, function()
 		mossman2:SetCycle((mossman2:GetCycle() + FrameTime()) % 1)
-		mossman2:SetPos(pos + Vector(math.cos(ang) * 100, math.sin(ang) * 100, 0))
 		mossman2:SetupBones()
 
-
 		mossman:SetupBones()
-		UPManip.LerpBoneLocalByMapping(0.1, mossman, mossman2, boneMapping)
+		UPManip.LerpBoneLocalByMapping(1, mossman, mossman2, boneMapping)
 		
 		ang = ang + FrameTime()
 	end)
