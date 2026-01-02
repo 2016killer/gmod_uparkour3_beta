@@ -192,7 +192,7 @@ Triggers an assert error if parameters are invalid, used to avoid runtime errors
 
 ![client](./materials/upgui/client.jpg)
 
-**void** UPManip.LerpBoneWorldByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** silentlog)
+**void** UPManip.LerpBoneWorldByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** scaling, **bool** silentlog)
 
 ```note
 
@@ -205,7 +205,7 @@ Requires updating every frame. It's recommended to execute ent:SetupBones() and 
 
 ![client](./materials/upgui/client.jpg)
 
-**void** UPManip.LerpBoneLocalByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** silentlog)
+**void** UPManip.LerpBoneLocalByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** scaling, **bool** silentlog)
 
 ```note
 

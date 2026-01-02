@@ -279,8 +279,6 @@ local function LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix
 	tarMatrix = offsetMatrix and tarMatrix * offsetMatrix or tarMatrix
 
 	local newManipScale = LerpVector(t, curMatrix:GetScale(), tarMatrix:GetScale())
-	ent:ManipulateBoneScale(boneId, newManipScale)
-
 	local newPos = LerpVector(t, curMatrix:GetTranslation(), tarMatrix:GetTranslation())
 	local newAng = LerpAngle(t, curMatrix:GetAngles(), tarMatrix:GetAngles())
 	local newManipPos, newManipAng = SetBonePosition(ent, boneName, newPos, newAng, silentlog)
@@ -308,12 +306,22 @@ local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, 
 	tarMatrixLocal = offsetMatrix and tarMatrixLocal * offsetMatrix or tarMatrixLocal
 
 	local newManipScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
-	ent:ManipulateBoneScale(boneId, newManipScale)
-
 	local newPos = LerpVector(t, curMatrixLocal:GetTranslation(), tarMatrixLocal:GetTranslation())
 	local newAng = LerpAngle(t, curMatrixLocal:GetAngles(), tarMatrixLocal:GetAngles())
 	local newManipPos, newManipAng = SetBonePositionLocal(ent, boneName, parentName, newPos, newAng, silentlog)
 	return newManipPos, newManipAng, newManipScale
+end
+
+local function LerpBoneWorldWithScaling(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
+	local _, _, newManipScale = LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
+	local boneId = ent:LookupBone(boneName)
+	if boneId and newManipScale then ent:ManipulateBoneScale(boneId, newManipScale) end
+end
+
+local function LerpBoneLocalWithScaling(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
+	local _, _, newManipScale = LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
+	local boneId = ent:LookupBone(boneName)
+	if boneId and newManipScale then ent:ManipulateBoneScale(boneId, newManipScale) end
 end
 
 UPManip.GetBoneMatrix = GetBoneMatrix
@@ -324,6 +332,8 @@ UPManip.GetEntBonesFamilyLevel = GetEntBonesFamilyLevel
 UPManip.IsMatrixSingular = IsMatrixSingular
 UPManip.LerpBoneWorld = LerpBoneWorld
 UPManip.LerpBoneLocal = LerpBoneLocal
+UPManip.LerpBoneWorldWithScaling = LerpBoneWorldWithScaling
+UPManip.LerpBoneLocalWithScaling = LerpBoneLocalWithScaling
 
 UPManip.InitBoneMappingOffset = function(boneMapping)
 	-- 主要是验证参数类型和初始化偏移矩阵
@@ -379,43 +389,45 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 	end
 end
 
-UPManip.LerpBoneWorldByMapping = function(t, ent, tarEnt, boneMapping, silentlog)
+UPManip.LerpBoneWorldByMapping = function(t, ent, tarEnt, boneMapping, scaling, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	local main = boneMapping.main
 	local keySort = boneMapping.keySort
+	local lerpCall = scaling and LerpBoneWorldWithScaling or LerpBoneWorld
 	for _, boneName in ipairs(keySort) do
 		local val = main[boneName]
 		if istable(val) then
-			LerpBoneWorld(t, ent, tarEnt, 
+			lerpCall(t, ent, tarEnt, 
 				boneName, val.tarBone, 
 			val.offset, silentlog)
 		else
-			LerpBoneWorld(t, ent, tarEnt, 
+			lerpCall(t, ent, tarEnt, 
 				boneName, nil, 
 			nil, silentlog)
 		end
 	end
 end
 
-UPManip.LerpBoneLocalByMapping = function(t, ent, tarEnt, boneMapping, silentlog)
+UPManip.LerpBoneLocalByMapping = function(t, ent, tarEnt, boneMapping, scaling, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	local main = boneMapping.main
 	local keySort = boneMapping.keySort
+	local lerpCall = scaling and LerpBoneLocalWithScaling or LerpBoneLocal
 	for _, boneName in ipairs(keySort) do
 		local val = main[boneName]
 
 		if istable(val) then
-			LerpBoneLocal(t, ent, tarEnt, 
+			lerpCall(t, ent, tarEnt, 
 				boneName, val.tarBone, 
 				val.custParent, val.tarParent, 
 				val.offset, 
 			silentlog)
 		else
-			LerpBoneLocal(t, ent, tarEnt, 
+			lerpCall(t, ent, tarEnt, 
 				boneName, nil, 
 				nil, nil, 
 				nil, 
@@ -438,7 +450,10 @@ concommand.Add('upmanip_test_world', function(ply)
 	local boneMapping = {
 		main = {
 			['self'] = {ang = Angle(90, 0, 0)},
-			['ValveBiped.Bip01_Head1'] = {ang = Angle(90, 0, 0)}
+			['ValveBiped.Bip01_Head1'] = {
+				ang = Angle(90, 0, 0),
+				scale = Vector(2, 2, 2)
+			}
 		},
 		keySort = {
 			'self', 
@@ -456,7 +471,7 @@ concommand.Add('upmanip_test_world', function(ply)
 		mossman2:SetupBones()
 		mossman:SetupBones()
 
-		UPManip.LerpBoneWorldByMapping(0.1, mossman, mossman2, boneMapping)
+		UPManip.LerpBoneWorldByMapping(0.1, mossman, mossman2, boneMapping, true)
 		
 		ang = ang + FrameTime()
 	end)
@@ -499,7 +514,10 @@ concommand.Add('upmanip_test_local', function(ply)
 			['ValveBiped.Bip01_R_Forearm'] = true,
 			['ValveBiped.Bip01_R_Hand'] = true,
 			['ValveBiped.Bip01_Neck1'] = true,
-			['ValveBiped.Bip01_Head1'] = true,
+			['ValveBiped.Bip01_Head1'] = {
+				ang = Angle(90, 0, 0),
+				scale = Vector(2, 2, 2)
+			},
 		},
 		keySort = {
 			'ValveBiped.Bip01_Spine',
@@ -530,7 +548,7 @@ concommand.Add('upmanip_test_local', function(ply)
 		mossman2:SetupBones()
 
 		mossman:SetupBones()
-		UPManip.LerpBoneLocalByMapping(1, mossman, mossman2, boneMapping)
+		UPManip.LerpBoneLocalByMapping(1, mossman, mossman2, boneMapping, true)
 		
 		ang = ang + FrameTime()
 	end)

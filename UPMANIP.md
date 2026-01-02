@@ -150,7 +150,7 @@ custParent 和 tarParent 字段仅对局部空间插值有效, 指定custParent�
 ```
 
 ![client](./materials/upgui/client.jpg)
-**void** UPManip.LerpBoneWorldByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** silentlog)
+**void** UPManip.LerpBoneWorldByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** scaling, **bool** silentlog)
 ```note
 按骨骼映射表批量执行世界空间骨骼插值, 无需逐个调用LerpBoneWorld。
 boneMapping 需先通过 UPManip.InitBoneMappingOffset 初始化验证。
@@ -159,7 +159,7 @@ keySort 数组决定骨骼插值顺序, 需按"先父后子"排序, 否则子骨
 ```
 
 ![client](./materials/upgui/client.jpg)
-**void** UPManip.LerpBoneLocalByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** silentlog)
+**void** UPManip.LerpBoneLocalByMapping(**number** t, **entity** ent, **entity** tarEnt, **table** boneMapping, **bool** scaling, **bool** silentlog)
 ```note
 按骨骼映射表批量执行局部空间骨骼插值, 无需逐个调用LerpBoneLocal。
 boneMapping 需先通过 UPManip.InitBoneMappingOffset 初始化验证。
