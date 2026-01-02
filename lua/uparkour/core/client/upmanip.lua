@@ -201,7 +201,7 @@ local function SetBonePositionLocal(ent, boneName, parentName, posl, angl, silen
 		-- 在 GetBoneMatrixLocal 暗含了 parentMatrix 的存在性和奇异验证, 所以这里没问题
 		local parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
 		local newTransform = parentMatrix * tarMat
-		return SetBonePositionWorld(ent, boneId, newTransform:GetTranslation(), newTransform:GetAngles(), silentlog)
+		return SetBonePositionWorld(ent, boneName, newTransform:GetTranslation(), newTransform:GetAngles(), silentlog)
 	end
 end
 
@@ -299,8 +299,8 @@ local function SnapshotLocal(ent, boneMapping)
 	local matTbl = {}
 	local snapshot = {ent = ent, matTbl = matTbl, type = 'local'}
 	for i, boneName in pairs(keySort) do
-		local mappindData = main[boneName]
-		local parentName = istable(mappindData) and mappindData.custParent or nil
+		local mappingData = main[boneName]
+		local parentName = istable(mappingData) and mappingData.custParent or nil
 		local localMatrix, boneId = GetBoneMatrixLocal(ent, boneName, parentName)
 		matTbl[boneName] = {localMatrix, boneId}
 	end
@@ -313,8 +313,8 @@ local function UnpackSnapshotWorld(entOrSnapshot, boneName, silentlog)
 		local worldMatrix, boneId = unpack(entOrSnapshot.matTbl[boneName])
 		return worldMatrix, boneId, entOrSnapshot.ent
 	elseif isentity(entOrSnapshot) and IsValid(entOrSnapshot) then
-		local worldMatrix, boneId = GetBoneMatrixWorld(entOrSnapshot, boneName)
-		return worldMatrix, boneId, entOrSnapshot
+		local boneMatrix, boneId = GetBoneMatrixWorld(entOrSnapshot, boneName)
+		return boneMatrix, boneId, entOrSnapshot
 	else
 		Log(string.format('[UPManip.UnpackSnapshotWorld]: invaild entOrSnapshot "%s", expect snapshotWorld(table) or valid entity', entOrSnapshot), silentlog)
 	end
