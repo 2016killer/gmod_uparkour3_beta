@@ -138,7 +138,12 @@ function ManipLegs:UpdateAnimation(dt)
 
 	if self.LastTarget ~= self.Target then
 		self.LerpT = 0
+		self.Snapshot = nil
 		hook.Run('UPExtLegsManipTargetChanged', self.LastTarget, self.Target)
+	end
+
+	if not self.Snapshot then
+		self.Snapshot = UPManip.SnapshotLocal(self.LegEnt, self.BoneMapping)
 	end
 
 	if isentity(self.Target) and IsValid(self.Target) then
@@ -148,7 +153,7 @@ function ManipLegs:UpdateAnimation(dt)
 		self.LegEnt:SetupBones()
 
 		UPManip.LerpBoneLocalByMapping(self.LerpT, 
-			self.LegEnt, self.Target, 
+			self.Snapshot, self.Target, 
 			self.BoneMapping, false
 		)
 	else
@@ -158,7 +163,7 @@ function ManipLegs:UpdateAnimation(dt)
 		self.LegEnt:SetupBones()
 
 		UPManip.LerpBoneLocalByMapping(self.LerpT, 
-			self.LegEnt, LocalPlayer(), 
+			self.Snapshot, LocalPlayer(), 
 			self.BoneMapping, false
 		)
 	end
