@@ -317,7 +317,7 @@ local function UnpackSnapshotLocal(entOrSnapshot, boneName, parentName, silentlo
 		return localMatrix, boneId, entOrSnapshot.ent
 	elseif isentity(entOrSnapshot) and IsValid(entOrSnapshot) then
 		local boneMatrix, boneId = GetBoneMatrixLocal(entOrSnapshot, boneName, parentName)
-		return boneMatrix, boneId, ent
+		return boneMatrix, boneId, entOrSnapshot
 	else
 		Log(string.format('[UPManip.UnpackSnapshotLocal]: invaild entOrSnapshot "%s", expect snapshotLocal(table) or valid entity', entOrSnapshot), silentlog)
 	end
