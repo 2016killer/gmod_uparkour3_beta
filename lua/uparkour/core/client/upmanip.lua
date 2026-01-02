@@ -323,6 +323,14 @@ local function UnpackSnapshotLocal(entOrSnapshot, boneName, parentName, silentlo
 	end
 end
 
+local function GetEntFromSnapshot(entOrSnapshot)
+	if istable(entOrSnapshot) then
+		return entOrSnapshot.ent
+	else
+		return entOrSnapshot
+	end
+end
+
 
 local function LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
 	-- 不传入 tarBoneName 则使用恒等映射
@@ -380,12 +388,14 @@ end
 
 local function LerpBoneWorldWithScaling(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
 	local _, _, newManipScale = LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
+	ent = GetEntFromSnapshot(ent)
 	local boneId = ent:LookupBone(boneName)
 	if boneId and newManipScale then ent:ManipulateBoneScale(boneId, newManipScale) end
 end
 
 local function LerpBoneLocalWithScaling(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
 	local _, _, newManipScale = LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
+	ent = GetEntFromSnapshot(ent)
 	local boneId = ent:LookupBone(boneName)
 	if boneId and newManipScale then ent:ManipulateBoneScale(boneId, newManipScale) end
 end
@@ -404,6 +414,7 @@ UPManip.SnapshotWorld = SnapshotWorld
 UPManip.SnapshotLocal = SnapshotLocal
 UPManip.UnpackSnapshotWorld = UnpackSnapshotWorld
 UPManip.UnpackSnapshotLocal = UnpackSnapshotLocal
+UPManip.GetEntFromSnapshot = GetEntFromSnapshot
 
 UPManip.InitBoneMappingOffset = function(boneMapping)
 	-- 主要是验证参数类型和初始化偏移矩阵
