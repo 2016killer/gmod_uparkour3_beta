@@ -279,7 +279,7 @@ local function SnapshotWorld(ent, boneMapping)
 
 	local matTbl = {}
 	local snapshot = {ent = ent, matTbl = matTbl, type = 'world'}
-	for i, boneName in pairs(keySort) do
+	for i, boneName in ipairs(keySort) do
 		local data = {GetBoneMatrixWorld(ent, boneName)}
 		matTbl[boneName] = data
 		if isfunction(handler) then handler(boneMapping, ent, boneName, data, 'world') end
@@ -301,7 +301,7 @@ local function SnapshotLocal(ent, boneMapping)
 
 	local matTbl = {}
 	local snapshot = {ent = ent, matTbl = matTbl, type = 'local'}
-	for i, boneName in pairs(keySort) do
+	for i, boneName in ipairs(keySort) do
 		local mappingData = main[boneName]
 		local parentName = istable(mappingData) and mappingData.custParent or nil
 		local data = {GetBoneMatrixLocal(ent, boneName, parentName)}
@@ -411,7 +411,6 @@ UPManip.SnapshotWorld = SnapshotWorld
 UPManip.SnapshotLocal = SnapshotLocal
 UPManip.UnpackSnapshotWorld = UnpackSnapshotWorld
 UPManip.UnpackSnapshotLocal = UnpackSnapshotLocal
-UPManip.GetEntFromSnapshot = GetEntFromSnapshot
 
 UPManip.InitBoneMappingOffset = function(boneMapping)
 	-- 主要是验证参数类型和初始化偏移矩阵
@@ -421,9 +420,9 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 	assert(istable(boneMapping), string.format('invalid boneMapping, expect table, got %s', type(boneMapping)))
 	assert(istable(boneMapping.main), string.format('invalid boneMapping.main, expect table, got %s', type(boneMapping.main)))
 	assert(istable(boneMapping.keySort), string.format('invalid boneMapping.keySort, expect table, got %s', type(boneMapping.keySort)))
-	assert(isfunction(boneMapping.WorldLerpHandler) or boneMapping.WorldLerpHandler == nil, string.format('field "WorldLerpHandler" is invalid, expect function, got %s', type(boneMapping.WorldLerpHandler)))
-	assert(isfunction(boneMapping.LocalLerpHandler) or boneMapping.LocalLerpHandler == nil, string.format('field "LocalLerpHandler" is invalid, expect function, got %s', type(boneMapping.LocalLerpHandler)))
-	assert(isfunction(boneMapping.OnSnapshot) or boneMapping.OnSnapshot == nil, string.format('field "OnSnapshot" is invalid, expect function, got %s', type(boneMapping.OnSnapshot)))
+	assert(isfunction(boneMapping.WorldLerpHandler) or boneMapping.WorldLerpHandler == nil, string.format('field "WorldLerpHandler" is invalid, expect (function or nil), got %s', type(boneMapping.WorldLerpHandler)))
+	assert(isfunction(boneMapping.LocalLerpHandler) or boneMapping.LocalLerpHandler == nil, string.format('field "LocalLerpHandler" is invalid, expect (function or nil), got %s', type(boneMapping.LocalLerpHandler)))
+	assert(isfunction(boneMapping.OnSnapshot) or boneMapping.OnSnapshot == nil, string.format('field "OnSnapshot" is invalid, expect (function or nil), got %s', type(boneMapping.OnSnapshot)))
 
 	for key, val in pairs(boneMapping.main) do
 		assert(isstring(key), string.format('boneMapping.main key is invalid, expect string, got %s', type(key)))
@@ -491,7 +490,7 @@ UPManip.LerpBoneWorldByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		-- 注意, 使用自定义处理函数时, 必须返回所有三个值
 		if isfunction(handler) then 
 			newPos, newAng, newScale = handler(boneMapping, 
-				entOrSnapshot, boneName, tarEntOrSnapshot,
+				entOrSnapshot, tarEntOrSnapshot, boneName,
 				newPos, newAng, newScale
 			) 
 		end
