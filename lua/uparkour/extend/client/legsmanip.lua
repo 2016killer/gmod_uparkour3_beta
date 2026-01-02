@@ -24,20 +24,21 @@ local ManipLegs = g_ManipLegs
 ManipLegs.ForwardOffset = -22
 
 ManipLegs.BonesToRemove = {
-	['veBiped.Bip01_Head1'] = true,
-	['veBiped.Bip01_L_Hand'] = true,
-	['veBiped.Bip01_L_Forearm'] = true,
-	['veBiped.Bip01_L_Upperarm'] = true,
-	['veBiped.Bip01_L_Clavicle'] = true,
-	['veBiped.Bip01_R_Hand'] = true,
-	['veBiped.Bip01_R_Forearm'] = true,
-	['veBiped.Bip01_R_Upperarm'] = true,
-	['veBiped.Bip01_R_Clavicle'] = true,
-	['veBiped.Bip01_Spine4'] = true,
+	['ValveBiped.Bip01_Head1'] = true,
+	['ValveBiped.Bip01_L_Hand'] = true,
+	['ValveBiped.Bip01_L_Forearm'] = true,
+	['ValveBiped.Bip01_L_Upperarm'] = true,
+	['ValveBiped.Bip01_L_Clavicle'] = true,
+	['ValveBiped.Bip01_R_Hand'] = true,
+	['ValveBiped.Bip01_R_Forearm'] = true,
+	['ValveBiped.Bip01_R_Upperarm'] = true,
+	['ValveBiped.Bip01_R_Clavicle'] = true,
+	['ValveBiped.Bip01_Spine4'] = true,
 }
 
 ManipLegs.BoneMapping = {
 	main = {
+		['self'] = {},
 		['ValveBiped.Bip01_Pelvis'] = true,
 		['ValveBiped.Bip01_Spine'] = true,
 		['ValveBiped.Bip01_Spine1'] = true,
@@ -55,6 +56,7 @@ ManipLegs.BoneMapping = {
 	},
 
 	keySort = {
+		'self',
 		'ValveBiped.Bip01_Pelvis',
 		'ValveBiped.Bip01_Spine',
 		'ValveBiped.Bip01_Spine1',
@@ -71,6 +73,13 @@ ManipLegs.BoneMapping = {
 		'ValveBiped.Bip01_R_Toe0'
 	}
 }
+
+local BoneSelf = ManipLegs.BoneMapping.main['self']
+function BoneSelf:LerpLocalHandler(newAng, newPos, newScale, entOrSnapshot, boneName, tarEntOrSnapshot)
+	local tarEnt = UPManip.GetEntFromSnapshot(tarEntOrSnapshot)
+	print(tarEnt)
+	return newAng, newPos, newScale
+end
 
 
 ManipLegs.FRAME_LOOP_HOOK = {
@@ -93,8 +102,8 @@ ManipLegs.MagicOffset = Vector(0, 0, 5)
 ManipLegs.MagicOffsetZ0 = 8
 ManipLegs.MagicOffsetZ1 = -28
 ManipLegs.LerpT = 0
-ManipLegs.FadeInSpeed = 1
-ManipLegs.FadeOutSpeed = 0.01
+ManipLegs.FadeInSpeed = 10
+ManipLegs.FadeOutSpeed = 10
 ManipLegs.Speed = 0
 
 function ManipLegs:UpdatePosition()
@@ -124,9 +133,10 @@ function ManipLegs:UpdatePosition()
 	self.newAngle = newAngle
 
 	if IsValid(self.LegEnt) then
-		self.LegEnt:SetPos(Vector())
-		// self.LegEnt:SetPos(newPos)
+		newPos = zerovec
+		self.LegEnt:SetPos(newPos)
 		self.LegEnt:SetAngles(newAngle)
+		self.LegEnt:SetupBones()
 	end
 
 end
@@ -134,6 +144,10 @@ end
 function ManipLegs:UpdateAnimation(dt)
 	if not IsValid(self.LegEnt) or not IsValid(LocalPlayer()) then
 		return
+	end
+
+	if not isentity(self.Target) or not IsValid(self.Target) then
+		self.Target = nil
 	end
 
 	if self.LastTarget ~= self.Target then
@@ -166,6 +180,10 @@ function ManipLegs:UpdateAnimation(dt)
 			self.Snapshot, LocalPlayer(), 
 			self.BoneMapping, false
 		)
+
+		// if self.LerpT >= 1 then
+		// 	self:Sleep()
+		// end
 	end
 
 	self.LastTarget = self.Target
@@ -173,7 +191,6 @@ end
 
 function ManipLegs:PushFrameLoop()
 	for _, v in ipairs(self.FRAME_LOOP_HOOK) do
-		print(v.EVENT_NAME, v.IDENTITY)
 		hook.Add(v.EVENT_NAME, v.IDENTITY, v.CALL)
 	end
 	
@@ -235,14 +252,15 @@ function ManipLegs:Init()
 			continue 
 		end
 		
-		local manipVec, manipAng, manipScale = unpack(v or emptyTable)
+		local manipVec, manipAng, manipScale = unpack(istable(v) and v or emptyTable)
 		manipVec = isvector(manipVec) and manipVec or zerovec
 		manipAng = isangle(manipAng) and manipAng or zeroang
 		manipScale = isvector(manipScale) and manipScale or zerovec
 
-		LegEnt:ManipulateBoneScale(boneId, manipScale)
+		
 		LegEnt:ManipulateBonePosition(boneId, manipVec)
 		LegEnt:ManipulateBoneAngles(boneId, manipAng)
+		LegEnt:ManipulateBoneScale(boneId, manipScale)
 	end
 
 	return true
@@ -289,13 +307,13 @@ ManipLegs.MAIN_EVENT = {
 				print('[UPExt]: LegsManip: VMLegs has not been started yet!')
 				return
 			end
-			print('ssss')
+
 			VMLegs.LegModel:SetNoDraw(true)
 
 			local self = ManipLegs
 			self.LerpT = 0
 			self.Target = VMLegs.LegParent
-			print(self:Wake())
+			self:Wake()
 		end
 	}
 }
