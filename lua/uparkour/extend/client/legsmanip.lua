@@ -38,7 +38,6 @@ ManipLegs.BonesToRemove = {
 
 ManipLegs.BoneMapping = {
 	main = {
-		['self'] = {},
 		['ValveBiped.Bip01_Pelvis'] = true,
 		['ValveBiped.Bip01_Spine'] = true,
 		['ValveBiped.Bip01_Spine1'] = true,
@@ -56,7 +55,6 @@ ManipLegs.BoneMapping = {
 	},
 
 	keySort = {
-		'self',
 		'ValveBiped.Bip01_Pelvis',
 		'ValveBiped.Bip01_Spine',
 		'ValveBiped.Bip01_Spine1',
@@ -74,11 +72,39 @@ ManipLegs.BoneMapping = {
 	}
 }
 
-local BoneSelf = ManipLegs.BoneMapping.main['self']
-function BoneSelf:LerpLocalHandler(newAng, newPos, newScale, entOrSnapshot, boneName, tarEntOrSnapshot)
+
+function ManipLegs.BoneMapping:LocalLerpHandler(entOrSnapshot, tarEntOrSnapshot, boneName,
+newPos, newAng, newScale, t, curMatrixLocal)
 	local tarEnt = UPManip.GetEntFromSnapshot(tarEntOrSnapshot)
-	print(tarEnt)
-	return newAng, newPos, newScale
+	if boneName ~= 'ValveBiped.Bip01_Pelvis' then
+		return newPos, newAng, newScale
+	end
+
+	local mappingData = istable(self.main[boneName]) and self.main[boneName] or emptyTable
+	local tarBoneName = mappingData.tarBone or boneName
+	local offsetMatrix = mappingData.offset
+
+
+	local targetTransformInvert = tarEnt:GetWorldTransformMatrix()
+	local temp = targetTransformInvert:GetAngles()
+	temp.p = 0
+	temp.r = 0
+	targetTransformInvert:SetAngles(temp)
+
+	if UPManip.IsMatrixSingular(targetTransformInvert) then
+		return newPos, newAng, newScale
+	end
+	targetTransformInvert:Invert()
+
+	local tarMatrixLocal = targetTransformInvert * UPManip.GetBoneMatrixWorld(tarEnt, tarBoneName)
+	tarMatrixLocal = offsetMatrix and tarMatrixLocal * offsetMatrix or tarMatrixLocal
+
+	local newScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
+	local newPos = curMatrixLocal:GetTranslation()
+	local newAng = LerpAngle(t, curMatrixLocal:GetAngles(), tarMatrixLocal:GetAngles())
+	
+	
+	return newPos, newAng, newScale
 end
 
 
@@ -95,6 +121,14 @@ ManipLegs.FRAME_LOOP_HOOK = {
 			self:UpdatePosition()
 			self:UpdateAnimation(FrameTime())
 		end
+	},
+
+	{
+		EVENT_NAME = 'ShouldDisableLegs',
+		IDENTITY = 'UPExtLegsManip',
+		CALL = function()
+			return true
+		end
 	}
 }
 
@@ -102,8 +136,8 @@ ManipLegs.MagicOffset = Vector(0, 0, 5)
 ManipLegs.MagicOffsetZ0 = 8
 ManipLegs.MagicOffsetZ1 = -28
 ManipLegs.LerpT = 0
-ManipLegs.FadeInSpeed = 10
-ManipLegs.FadeOutSpeed = 10
+ManipLegs.FadeInSpeed = 2
+ManipLegs.FadeOutSpeed = 2
 ManipLegs.Speed = 0
 
 function ManipLegs:UpdatePosition()
@@ -133,7 +167,7 @@ function ManipLegs:UpdatePosition()
 	self.newAngle = newAngle
 
 	if IsValid(self.LegEnt) then
-		newPos = zerovec
+		// newPos = zerovec
 		self.LegEnt:SetPos(newPos)
 		self.LegEnt:SetAngles(newAngle)
 		self.LegEnt:SetupBones()
@@ -151,6 +185,8 @@ function ManipLegs:UpdateAnimation(dt)
 	end
 
 	if self.LastTarget ~= self.Target then
+		print(self.LastTarget, self.Target)
+
 		self.LerpT = 0
 		self.Snapshot = nil
 		hook.Run('UPExtLegsManipTargetChanged', self.LastTarget, self.Target)
@@ -158,6 +194,13 @@ function ManipLegs:UpdateAnimation(dt)
 
 	if not self.Snapshot then
 		self.Snapshot = UPManip.SnapshotLocal(self.LegEnt, self.BoneMapping)
+
+		local snapshotWorld = UPManip.SnapshotWorld(self.LegEnt, self.BoneMapping)
+		for k, v in pairs(snapshotWorld.matTbl) do
+			local mat = v[1]
+			if not mat then continue end
+			debugoverlay.Box(mat:GetTranslation(), Vector(-1, -1, -1), Vector(1, 1, 1), 0.1, Color(255, 0, 0))
+		end
 	end
 
 	if isentity(self.Target) and IsValid(self.Target) then
@@ -276,6 +319,7 @@ function ManipLegs:Wake()
 
 	self.LegEnt:SetParent(ply)
 	self.LegEnt:SetNoDraw(false)
+	self.IsWake = true
 
 	hook.Run('UPExtLegsManipWake', self.LegEnt)
 
@@ -292,6 +336,7 @@ function ManipLegs:Sleep()
 
 	self.LegEnt:SetParent(nil)
 	self.LegEnt:SetNoDraw(false)
+	self.IsWake = false
 
 	hook.Run('UPExtLegsManipSleep', self.LegEnt)
 
@@ -339,6 +384,26 @@ end
 
 g_ManipLegs:Init()
 g_ManipLegs:Register()
+
+concommand.Add('upext_legsmanip_debug', function()
+	print('[UPExt]: LegsManip: Debug')
+
+	if IsValid(g_ManipLegs.LegEnt) then
+		g_ManipLegs.LegEnt:SetupBones()
+		for i = 0, g_ManipLegs.LegEnt:GetBoneCount() - 1 do
+			local boneName = g_ManipLegs.LegEnt:GetBoneName(i)
+			local manipPos = g_ManipLegs.LegEnt:GetManipulateBonePosition(i)
+			local manipAng = g_ManipLegs.LegEnt:GetManipulateBoneAngles(i)
+			local manipScale = g_ManipLegs.LegEnt:GetManipulateBoneScale(i)
+			print(string.format('============%s===========', boneName))
+			print(string.format('ManipPos: %s', manipPos))
+			print(string.format('ManipAng: %s', manipAng))
+			print(string.format('ManipScale: %s', manipScale))
+			print(string.format('============%s===========\n', boneName))
+		end
+	end
+
+end)
 -- ==============================================================
 -- 菜单
 -- ==============================================================
