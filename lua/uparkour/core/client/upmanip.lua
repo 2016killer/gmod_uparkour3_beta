@@ -19,8 +19,8 @@
 	骨架嫁接。 
 
 	关于操纵与获取
-	这里开放的其他底层包括 GetBoneMatrixLocal, GetBoneMatrix, SetBonePositionLocal, SetBonePosition
-	因为操纵是通过 ManipulateBonexxx 来实现的, 所以 SetBonePosition 和 GetBoneMatrix 有着必然的耦合。 (除了 'self')
+	这里开放的其他底层包括 GetBoneMatrixLocal, GetBoneMatrixWorld, SetBonePositionLocal, SetBonePositionWorld
+	因为操纵是通过 ManipulateBonexxx 来实现的, 所以 SetBonePositionWorld 和 GetBoneMatrixWorld 有着必然的耦合。 (除了 'self')
 --]]
 
 
@@ -48,7 +48,7 @@ local function GetInverse(mat)
 	return not IsMatrixSingular(mat) and mat:GetInverse() or nil
 end
 
-local function GetBoneMatrix(ent, boneName)
+local function GetBoneMatrixWorld(ent, boneName)
 	if boneName == 'self' then
 		return ent:GetWorldTransformMatrix(), -1
 	end
@@ -58,7 +58,16 @@ local function GetBoneMatrix(ent, boneName)
 	return ent:GetBoneMatrix(boneId), boneId
 end
 
-local function SetBonePosition(ent, boneName, posw, angw, silentlog) 
+local function SetBoneScale(ent, boneName, scale)
+	if boneName == 'self' then
+		return
+	end
+	local boneId = ent:LookupBone(boneName)
+	if not boneId then return end
+	ent:ManipulateBoneScale(boneId, scale)
+end
+
+local function SetBonePositionWorld(ent, boneName, posw, angw, silentlog) 
 	-- 必须传入非奇异矩阵, 如果骨骼或父级的变换是奇异的, 则可能出现问题
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
@@ -70,28 +79,28 @@ local function SetBonePosition(ent, boneName, posw, angw, silentlog)
 		return posw, angw
 	end
 
-	local curTransform, boneId = GetBoneMatrix(ent, boneName)
+	local curTransform, boneId = GetBoneMatrixWorld(ent, boneName)
 	if not curTransform then 
-		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneName "%s" no Matrix', ent, boneName), silentlog)
+		Log(string.format('[UPManip.SetBonePositionWorld]: ent "%s" boneName "%s" no Matrix', ent, boneName), silentlog)
 		return nil
 	end
 	
 	local parentId = ent:GetBoneParent(boneId)
 	local parentTransform = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
 	if not parentTransform then 
-		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneName "%s" no parent', ent, boneName), silentlog)
+		Log(string.format('[UPManip.SetBonePositionWorld]: ent "%s" boneName "%s" no parent', ent, boneName), silentlog)
 		return nil
 	end
 
 	local curTransformInvert = GetInverse(curTransform)
 	if not curTransformInvert then 
-		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneName "%s" Matrix is Singular', ent, boneName), silentlog)
+		Log(string.format('[UPManip.SetBonePositionWorld]: ent "%s" boneName "%s" Matrix is Singular', ent, boneName), silentlog)
 		return nil
 	end
 
 	local parentTransformInvert = GetInverse(parentTransform)
 	if not parentTransformInvert then 
-		Log(string.format('[UPManip.SetBonePosition]: ent "%s" boneName "%s" parent Matrix is Singular', ent, boneName), silentlog)
+		Log(string.format('[UPManip.SetBonePositionWorld]: ent "%s" boneName "%s" parent Matrix is Singular', ent, boneName), silentlog)
 		return nil
 	end
 
@@ -118,12 +127,12 @@ local function GetBoneMatrixLocal(ent, boneName, parentName, invert)
 	-- 这里 parentName 是为了支持自定义父级, 默认为 nil, 表示使用实体的默认父级
 	-- 在这里, 我们将实体本身的父级视为 World
 	
-	local boneMatrix, boneId = GetBoneMatrix(ent, boneName)
+	local boneMatrix, boneId = GetBoneMatrixWorld(ent, boneName)
 	if not boneId or boneId == -1 then return boneMatrix end
 
 	local parentMatrix, parentId = nil
 	if parentName then
-		parentMatrix, parentId = GetBoneMatrix(ent, parentName)
+		parentMatrix, parentId = GetBoneMatrixWorld(ent, parentName)
 	else
 		parentId = ent:GetBoneParent(boneId)
 		parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
@@ -145,7 +154,7 @@ end
 
 local function SetBonePositionLocal(ent, boneName, parentName, posl, angl, silentlog) 
 	-- 考虑到自定义父级的情况, 这里需要传入父级名称
-	-- 内部可能使用 UPManip.SetBonePosition 来设置位置, 这要看传入的父级是否为默认父级
+	-- 内部可能使用 UPManip.SetBonePositionWorld 来设置位置, 这要看传入的父级是否为默认父级
 
 	-- 必须传入非奇异矩阵, 如果骨骼或父级的变换是奇异的, 则可能出现问题
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
@@ -192,7 +201,7 @@ local function SetBonePositionLocal(ent, boneName, parentName, posl, angl, silen
 		-- 在 GetBoneMatrixLocal 暗含了 parentMatrix 的存在性和奇异验证, 所以这里没问题
 		local parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
 		local newTransform = parentMatrix * tarMat
-		return SetBonePosition(ent, boneId, newTransform:GetTranslation(), newTransform:GetAngles(), silentlog)
+		return SetBonePositionWorld(ent, boneId, newTransform:GetTranslation(), newTransform:GetAngles(), silentlog)
 	end
 end
 
@@ -270,7 +279,7 @@ local function SnapshotWorld(ent, boneMapping)
 	local matTbl = {}
 	local snapshot = {ent = ent, matTbl = matTbl, type = 'world'}
 	for i, boneName in pairs(keySort) do
-		local worldMatrix, boneId = GetBoneMatrix(ent, boneName)
+		local worldMatrix, boneId = GetBoneMatrixWorld(ent, boneName)
 		matTbl[boneName] = {worldMatrix, boneId}
 	end
 
@@ -304,7 +313,7 @@ local function UnpackSnapshotWorld(entOrSnapshot, boneName, silentlog)
 		local worldMatrix, boneId = unpack(entOrSnapshot.matTbl[boneName])
 		return worldMatrix, boneId, entOrSnapshot.ent
 	elseif isentity(entOrSnapshot) and IsValid(entOrSnapshot) then
-		local worldMatrix, boneId = GetBoneMatrix(entOrSnapshot, boneName)
+		local worldMatrix, boneId = GetBoneMatrixWorld(entOrSnapshot, boneName)
 		return worldMatrix, boneId, entOrSnapshot
 	else
 		Log(string.format('[UPManip.UnpackSnapshotWorld]: invaild entOrSnapshot "%s", expect snapshotWorld(table) or valid entity', entOrSnapshot), silentlog)
@@ -332,84 +341,68 @@ local function GetEntFromSnapshot(entOrSnapshot)
 end
 
 
-local function LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
+local function LerpBoneWorld(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, offsetMatrix, silentlog)
 	-- 不传入 tarBoneName 则使用恒等映射
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local curMatrix, boneId, ent = UnpackSnapshotWorld(ent, boneName, silentlog)
+	local curMatrix, boneId, ent = UnpackSnapshotWorld(entOrSnapshot, boneName, silentlog)
 	if not curMatrix then 
-		Log(string.format('[UPManip.LerpBoneWorld]: can not find curMatrix, boneName: "%s", ent "%s"', boneName, ent), silentlog)
+		Log(string.format('[UPManip.LerpBoneWorld]: can not find curMatrix, boneName: "%s", entOrSnapshot "%s"', boneName, entOrSnapshot), silentlog)
 		return nil
 	end
 
 	tarBoneName = tarBoneName or boneName
-	local tarMatrix, _, tarEnt = UnpackSnapshotWorld(tarEnt, tarBoneName, silentlog)
+	local tarMatrix, _, tarEnt = UnpackSnapshotWorld(tarEntOrSnapshot, tarBoneName, silentlog)
 	if not tarMatrix then 
-		Log(string.format('[UPManip.LerpBoneWorld]: can not find tarMatrix, tarBoneName: "%s", tarEnt "%s"', tarBoneName, tarEnt), silentlog)
+		Log(string.format('[UPManip.LerpBoneWorld]: can not find tarMatrix, tarBoneName: "%s", tarEntOrSnapshot "%s"', tarBoneName, tarEntOrSnapshot), silentlog)
 		return nil
 	end
 
 	tarMatrix = offsetMatrix and tarMatrix * offsetMatrix or tarMatrix
 
-	local newManipScale = LerpVector(t, curMatrix:GetScale(), tarMatrix:GetScale())
+	local newScale = LerpVector(t, curMatrix:GetScale(), tarMatrix:GetScale())
 	local newPos = LerpVector(t, curMatrix:GetTranslation(), tarMatrix:GetTranslation())
 	local newAng = LerpAngle(t, curMatrix:GetAngles(), tarMatrix:GetAngles())
-	local newManipPos, newManipAng = SetBonePosition(ent, boneName, newPos, newAng, silentlog)
-	return newManipPos, newManipAng, newManipScale
+	return newPos, newAng, newScale
 end
 
-local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
+local function LerpBoneLocal(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local curMatrixLocal, boneId, ent = UnpackSnapshotLocal(ent, boneName, parentName, silentlog)
+	local curMatrixLocal, boneId, ent = UnpackSnapshotLocal(entOrSnapshot, boneName, parentName, silentlog)
 	if not curMatrixLocal then
-		Log(string.format('[UPManip.LerpBoneLocal]: get local matrix failed, boneName: "%s", ent "%s"', boneName, ent), silentlog)
+		Log(string.format('[UPManip.LerpBoneLocal]: get local matrix failed, boneName: "%s", entOrSnapshot "%s"', boneName, entOrSnapshot), silentlog)
 		return nil
 	end
 
 	tarBoneName = tarBoneName or boneName
 	tarParentName = tarParentName or parentName
-	local tarMatrixLocal, _, tarEnt = UnpackSnapshotLocal(tarEnt, tarBoneName, tarParentName, silentlog)
+	local tarMatrixLocal, _, tarEnt = UnpackSnapshotLocal(tarEntOrSnapshot, tarBoneName, tarParentName, silentlog)
 	if not tarMatrixLocal then 
-		Log(string.format('[UPManip.LerpBoneLocal]: fail to get targetBoneMatrix, boneName: "%s", target "%s"', tarBoneName, tarEnt), silentlog)
+		Log(string.format('[UPManip.LerpBoneLocal]: fail to get targetBoneMatrix, boneName: "%s", target "%s"', tarBoneName, tarEntOrSnapshot), silentlog)
 		return nil
 	end
 		
 	tarMatrixLocal = offsetMatrix and tarMatrixLocal * offsetMatrix or tarMatrixLocal
 
-	local newManipScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
+	local newScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
 	local newPos = LerpVector(t, curMatrixLocal:GetTranslation(), tarMatrixLocal:GetTranslation())
 	local newAng = LerpAngle(t, curMatrixLocal:GetAngles(), tarMatrixLocal:GetAngles())
-	local newManipPos, newManipAng = SetBonePositionLocal(ent, boneName, parentName, newPos, newAng, silentlog)
-	return newManipPos, newManipAng, newManipScale
+	return newPos, newAng, newScale
 end
 
-local function LerpBoneWorldWithScaling(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
-	local _, _, newManipScale = LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
-	ent = GetEntFromSnapshot(ent)
-	local boneId = ent:LookupBone(boneName)
-	if boneId and newManipScale then ent:ManipulateBoneScale(boneId, newManipScale) end
-end
-
-local function LerpBoneLocalWithScaling(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
-	local _, _, newManipScale = LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
-	ent = GetEntFromSnapshot(ent)
-	local boneId = ent:LookupBone(boneName)
-	if boneId and newManipScale then ent:ManipulateBoneScale(boneId, newManipScale) end
-end
-
-UPManip.GetBoneMatrix = GetBoneMatrix
+UPManip.GetEntFromSnapshot = GetEntFromSnapshot
+UPManip.SetBoneScale = SetBoneScale
+UPManip.GetBoneMatrixWorld = GetBoneMatrixWorld
 UPManip.GetBoneMatrixLocal = GetBoneMatrixLocal
-UPManip.SetBonePosition = SetBonePosition
+UPManip.SetBonePositionWorld = SetBonePositionWorld
 UPManip.SetBonePositionLocal = SetBonePositionLocal
 UPManip.GetEntBonesFamilyLevel = GetEntBonesFamilyLevel
 UPManip.IsMatrixSingular = IsMatrixSingular
 UPManip.LerpBoneWorld = LerpBoneWorld
 UPManip.LerpBoneLocal = LerpBoneLocal
-UPManip.LerpBoneWorldWithScaling = LerpBoneWorldWithScaling
-UPManip.LerpBoneLocalWithScaling = LerpBoneLocalWithScaling
 UPManip.SnapshotWorld = SnapshotWorld
 UPManip.SnapshotLocal = SnapshotLocal
 UPManip.UnpackSnapshotWorld = UnpackSnapshotWorld
@@ -440,6 +433,8 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 		local customParent = val.custParent
 		local targetBoneName = val.tarBone
 		local targetParentName = val.tarParent
+		local WorldLerpHandler = val.WorldLerpHandler
+		local LocalLerpHandler = val.LocalLerpHandler
 
 		assert(isstring(customParent) or customParent == nil, string.format('field "custParent" is invalid, expect (string or nil), got %s', type(customParent)))
 		assert(isstring(targetBoneName) or targetBoneName == nil, string.format('field "tarBone" is invalid, expect (string or nil), got %s', type(targetBoneName)))
@@ -447,7 +442,8 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 		assert(isangle(offsetAng) or offsetAng == nil, string.format('field "ang" is invalid, expect (angle or nil), got %s', type(offsetAng)))
 		assert(isvector(offsetPos) or offsetPos == nil, string.format('field "pos" is invalid, expect (vector or nil), got %s', type(offsetPos)))
 		assert(isvector(offsetScale) or offsetScale == nil, string.format('field "scale" is invalid, expect (vector or nil), got %s', type(offsetScale)))
-
+		assert(isfunction(LocalLerpHandler) or LocalLerpHandler == nil, string.format('field "LocalLerpHandler" is invalid, expect (function or nil), got %s', type(LocalLerpHandler)))
+		assert(isfunction(WorldLerpHandler) or WorldLerpHandler == nil, string.format('field "WorldLerpHandler" is invalid, expect (function or nil), got %s', type(WorldLerpHandler)))
 
 		if isangle(offsetAng) then
 			offsetMatrix = offsetMatrix or Matrix()
@@ -470,50 +466,62 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 	end
 end
 
-UPManip.LerpBoneWorldByMapping = function(t, ent, tarEnt, boneMapping, scaling, silentlog)
+UPManip.LerpBoneWorldByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, boneMapping, scaling, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	local main = boneMapping.main
 	local keySort = boneMapping.keySort
-	local lerpCall = scaling and LerpBoneWorldWithScaling or LerpBoneWorld
+
 	for _, boneName in ipairs(keySort) do
 		local val = main[boneName]
-		if istable(val) then
-			lerpCall(t, ent, tarEnt, 
-				boneName, val.tarBone, 
-			val.offset, silentlog)
-		else
-			lerpCall(t, ent, tarEnt, 
-				boneName, nil, 
-			nil, silentlog)
-		end
+		val = istable(val) and val or emptyTable
+		
+		local tarBoneName = val.tarBone
+		local offsetMatrix = val.offset
+		local handler = val.WorldLerpHandler
+
+		local newPos, newAng, newScale = LerpBoneWorld(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, offsetMatrix, silentlog)
+		-- 三个是一起返回的
+		if not newPos then continue end
+		
+		-- 注意, 使用自定义处理函数时, 必须返回所有三个值
+		if isfunction(handler) then newPos, newAng, newScale = handler(val, newPos, newAng, newScale, entOrSnapshot, boneName, tarEntOrSnapshot) end
+		if not newPos then continue end
+
+		local ent = GetEntFromSnapshot(entOrSnapshot)
+		if scaling then SetBoneScale(ent, boneName, newScale) end
+		if newPos and newAng then SetBonePositionWorld(ent, boneName, newPos, newAng, silentlog) end
 	end
 end
 
-UPManip.LerpBoneLocalByMapping = function(t, ent, tarEnt, boneMapping, scaling, silentlog)
+UPManip.LerpBoneLocalByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, boneMapping, scaling, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	local main = boneMapping.main
 	local keySort = boneMapping.keySort
-	local lerpCall = scaling and LerpBoneLocalWithScaling or LerpBoneLocal
 	for _, boneName in ipairs(keySort) do
 		local val = main[boneName]
+		val = istable(val) and val or emptyTable
 
-		if istable(val) then
-			lerpCall(t, ent, tarEnt, 
-				boneName, val.tarBone, 
-				val.custParent, val.tarParent, 
-				val.offset, 
-			silentlog)
-		else
-			lerpCall(t, ent, tarEnt, 
-				boneName, nil, 
-				nil, nil, 
-				nil, 
-			silentlog)
-		end
+		local tarBoneName = val.tarBone
+		local parentName = val.custParent
+		local tarParentName = val.tarParent
+		local offsetMatrix = val.offset
+		local handler = val.LocalLerpHandler
+		
+		local newPos, newAng, newScale = LerpBoneLocal(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
+		-- 三个是一起返回的
+		if not newPos then continue end
+
+		-- 注意, 使用自定义处理函数时, 必须返回所有三个值
+		if isfunction(handler) then newPos, newAng, newScale = handler(val, newPos, newAng, newScale, entOrSnapshot, boneName, tarEntOrSnapshot) end
+		if not newPos then continue end
+
+		local ent = GetEntFromSnapshot(entOrSnapshot)
+		if scaling then SetBoneScale(ent, boneName, newScale) end
+		if newPos and newAng then SetBonePositionLocal(ent, boneName, parentName, newPos, newAng, silentlog) end
 	end
 end
 
