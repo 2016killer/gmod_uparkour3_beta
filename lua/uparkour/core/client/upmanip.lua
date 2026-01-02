@@ -368,7 +368,7 @@ local function LerpBoneWorld(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBo
 	local newScale = LerpVector(t, curMatrix:GetScale(), tarMatrix:GetScale())
 	local newPos = LerpVector(t, curMatrix:GetTranslation(), tarMatrix:GetTranslation())
 	local newAng = LerpAngle(t, curMatrix:GetAngles(), tarMatrix:GetAngles())
-	return newPos, newAng, newScale
+	return newPos, newAng, newScale, curMatrix, tarMatrix
 end
 
 local function LerpBoneLocal(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
@@ -394,7 +394,7 @@ local function LerpBoneLocal(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBo
 	local newScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
 	local newPos = LerpVector(t, curMatrixLocal:GetTranslation(), tarMatrixLocal:GetTranslation())
 	local newAng = LerpAngle(t, curMatrixLocal:GetAngles(), tarMatrixLocal:GetAngles())
-	return newPos, newAng, newScale
+	return newPos, newAng, newScale, curMatrixLocal, tarMatrixLocal
 end
 
 UPManip.GetEntFromSnapshot = GetEntFromSnapshot
@@ -483,7 +483,7 @@ UPManip.LerpBoneWorldByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		local tarBoneName = val.tarBone
 		local offsetMatrix = val.offset
 
-		local newPos, newAng, newScale = LerpBoneWorld(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, offsetMatrix, silentlog)
+		local newPos, newAng, newScale, curMatrixWorld, tarMatrixWorld = LerpBoneWorld(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, offsetMatrix, silentlog)
 		-- 三个是一起返回的
 		if not newPos then continue end
 		
@@ -491,7 +491,7 @@ UPManip.LerpBoneWorldByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		if isfunction(handler) then 
 			newPos, newAng, newScale = handler(boneMapping, 
 				entOrSnapshot, tarEntOrSnapshot, boneName,
-				newPos, newAng, newScale, t
+				newPos, newAng, newScale, t, curMatrixWorld, tarMatrixWorld
 			) 
 		end
 		if not newPos then continue end
@@ -519,7 +519,7 @@ UPManip.LerpBoneLocalByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		local tarParentName = val.tarParent
 		local offsetMatrix = val.offset
 		
-		local newPos, newAng, newScale = LerpBoneLocal(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
+		local newPos, newAng, newScale, curMatrixLocal, tarMatrixLocal = LerpBoneLocal(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
 		-- 三个是一起返回的
 		if not newPos then continue end
 
@@ -527,7 +527,7 @@ UPManip.LerpBoneLocalByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		if isfunction(handler) then 
 			newPos, newAng, newScale = handler(boneMapping, 
 				entOrSnapshot, tarEntOrSnapshot, boneName,
-				newPos, newAng, newScale, t
+				newPos, newAng, newScale, t, curMatrixLocal, tarMatrixLocal
 			) 
 		end
 		if not newPos then continue end
