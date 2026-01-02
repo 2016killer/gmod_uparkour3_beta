@@ -260,17 +260,17 @@ local function LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local curMatrix = GetBoneMatrix(ent, boneName)
+	local curMatrix, boneId = GetBoneMatrix(ent, boneName)
 	if not curMatrix then 
 		Log(string.format('[UPManip.LerpBoneWorld]: can not find curMatrix, boneName: "%s", ent "%s"', boneName, ent), silentlog)
-		continue
+		return nil
 	end
 
 	tarBoneName = tarBoneName or boneName
 	local tarMatrix = GetBoneMatrix(tarEnt, tarBoneName)
 	if not tarMatrix then 
 		Log(string.format('[UPManip.LerpBoneWorld]: can not find tarMatrix, tarBoneName: "%s", tarEnt "%s"', tarBoneName, tarEnt), silentlog)
-		continue
+		return nil
 	end
 
 	tarMatrix = offsetMatrix and tarMatrix * offsetMatrix or tarMatrix
@@ -280,17 +280,17 @@ local function LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix
 	local newScale = LerpVector(t, curMatrix:GetScale(), tarMatrix:GetScale())
 
 	ent:ManipulateBoneScale(boneId, newScale)
-	SetBonePosition(ent, boneName, newPos, newAng, silentlog)
+	return SetBonePosition(ent, boneName, newPos, newAng, silentlog)
 end
 
-local function LerpBoneLocal(t, ent, tarEnt, boneName, parentName, tarBoneName, tarParentName, offsetMatrix, silentlog)
+local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
 	local curMatrixLocal, boneId = GetBoneMatrixLocal(ent, boneName, parentName)
 	if not curMatrixLocal then
 		Log(string.format('[UPManip.LerpBoneLocal]: get local matrix failed, boneName: "%s", ent "%s"', boneName, ent), silentlog)
-		return false
+		return nil
 	end
 
 	tarBoneName = tarBoneName or boneName
@@ -298,7 +298,7 @@ local function LerpBoneLocal(t, ent, tarEnt, boneName, parentName, tarBoneName, 
 	local tarMatrixLocal = GetBoneMatrixLocal(tarEnt, tarBoneName, tarParentName)
 	if not tarMatrixLocal then 
 		Log(string.format('[UPManip.LerpBoneLocal]: fail to get targetBoneMatrix, boneName: "%s", target "%s"', tarBoneName, tarEnt), silentlog)
-		return false
+		return nil
 	end
 		
 	tarMatrixLocal = offsetMatrix and tarMatrixLocal * offsetMatrix or tarMatrixLocal
@@ -308,7 +308,7 @@ local function LerpBoneLocal(t, ent, tarEnt, boneName, parentName, tarBoneName, 
 	local newScale = LerpVector(t, curMatrixLocal:GetScale(), tarMatrixLocal:GetScale())
 
 	ent:ManipulateBoneScale(boneId, newScale)
-	SetBonePositionLocal(ent, boneId, newPos, newAng, silentlog)
+	return SetBonePositionLocal(ent, boneName, newPos, newAng, silentlog)
 end
 
 UPManip.GetBoneMatrix = GetBoneMatrix
@@ -382,10 +382,15 @@ UPManip.LerpBoneWorldByMapping = function(t, ent, tarEnt, boneMapping, silentlog
 	local keySort = boneMapping.keySort
 	for _, boneName in ipairs(keySort) do
 		local val = main[boneName]
-		local tarBoneName = istable(val) and val.tarBone or nil
-		local offsetMatrix = istable(val) and val.offset or nil
-
-		LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
+		if istable(val) then
+			LerpBoneWorld(t, ent, tarEnt, 
+				boneName, val.tarBone, 
+			val.offset, silentlog)
+		else
+			LerpBoneWorld(t, ent, tarEnt, 
+				boneName, nil, 
+			nil, silentlog)
+		end
 	end
 end
 
@@ -406,13 +411,12 @@ UPManip.LerpBoneLocalByMapping = function(t, ent, tarEnt, boneMapping, silentlog
 			silentlog)
 		else
 			LerpBoneLocal(t, ent, tarEnt, 
-				boneName, tarBoneName, 
+				boneName, nil, 
 				nil, nil, 
 				nil, 
 			silentlog)
 		end
 	end
-
 end
 
 
