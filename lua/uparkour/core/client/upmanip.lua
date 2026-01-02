@@ -275,12 +275,14 @@ local function SnapshotWorld(ent, boneMapping)
 	assert(istable(boneMapping.main), 'boneMapping.main is invaild, expect table')
 
 	local keySort = boneMapping.keySort
+	local handler = boneMapping.OnSnapshot
 
 	local matTbl = {}
 	local snapshot = {ent = ent, matTbl = matTbl, type = 'world'}
 	for i, boneName in pairs(keySort) do
-		local worldMatrix, boneId = GetBoneMatrixWorld(ent, boneName)
-		matTbl[boneName] = {worldMatrix, boneId}
+		local data = {GetBoneMatrixWorld(ent, boneName)}
+		matTbl[boneName] = data
+		if isfunction(handler) then handler(boneMapping, ent, boneName, data, 'world') end
 	end
 
 	return snapshot
@@ -295,14 +297,16 @@ local function SnapshotLocal(ent, boneMapping)
 
 	local keySort = boneMapping.keySort
 	local main = boneMapping.main
+	local handler = boneMapping.OnSnapshot
 
 	local matTbl = {}
 	local snapshot = {ent = ent, matTbl = matTbl, type = 'local'}
 	for i, boneName in pairs(keySort) do
 		local mappingData = main[boneName]
 		local parentName = istable(mappingData) and mappingData.custParent or nil
-		local localMatrix, boneId = GetBoneMatrixLocal(ent, boneName, parentName)
-		matTbl[boneName] = {localMatrix, boneId}
+		local data = {GetBoneMatrixLocal(ent, boneName, parentName)}
+		matTbl[boneName] = data
+		if isfunction(handler) then handler(boneMapping, ent, boneName, data, 'local') end
 	end
 
 	return snapshot
@@ -417,6 +421,9 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 	assert(istable(boneMapping), string.format('invalid boneMapping, expect table, got %s', type(boneMapping)))
 	assert(istable(boneMapping.main), string.format('invalid boneMapping.main, expect table, got %s', type(boneMapping.main)))
 	assert(istable(boneMapping.keySort), string.format('invalid boneMapping.keySort, expect table, got %s', type(boneMapping.keySort)))
+	assert(isfunction(boneMapping.WorldLerpHandler) or boneMapping.WorldLerpHandler == nil, string.format('field "WorldLerpHandler" is invalid, expect function, got %s', type(boneMapping.WorldLerpHandler)))
+	assert(isfunction(boneMapping.LocalLerpHandler) or boneMapping.LocalLerpHandler == nil, string.format('field "LocalLerpHandler" is invalid, expect function, got %s', type(boneMapping.LocalLerpHandler)))
+	assert(isfunction(boneMapping.OnSnapshot) or boneMapping.OnSnapshot == nil, string.format('field "OnSnapshot" is invalid, expect function, got %s', type(boneMapping.OnSnapshot)))
 
 	for key, val in pairs(boneMapping.main) do
 		assert(isstring(key), string.format('boneMapping.main key is invalid, expect string, got %s', type(key)))
@@ -433,8 +440,6 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 		local customParent = val.custParent
 		local targetBoneName = val.tarBone
 		local targetParentName = val.tarParent
-		local WorldLerpHandler = val.WorldLerpHandler
-		local LocalLerpHandler = val.LocalLerpHandler
 
 		assert(isstring(customParent) or customParent == nil, string.format('field "custParent" is invalid, expect (string or nil), got %s', type(customParent)))
 		assert(isstring(targetBoneName) or targetBoneName == nil, string.format('field "tarBone" is invalid, expect (string or nil), got %s', type(targetBoneName)))
@@ -442,8 +447,6 @@ UPManip.InitBoneMappingOffset = function(boneMapping)
 		assert(isangle(offsetAng) or offsetAng == nil, string.format('field "ang" is invalid, expect (angle or nil), got %s', type(offsetAng)))
 		assert(isvector(offsetPos) or offsetPos == nil, string.format('field "pos" is invalid, expect (vector or nil), got %s', type(offsetPos)))
 		assert(isvector(offsetScale) or offsetScale == nil, string.format('field "scale" is invalid, expect (vector or nil), got %s', type(offsetScale)))
-		assert(isfunction(LocalLerpHandler) or LocalLerpHandler == nil, string.format('field "LocalLerpHandler" is invalid, expect (function or nil), got %s', type(LocalLerpHandler)))
-		assert(isfunction(WorldLerpHandler) or WorldLerpHandler == nil, string.format('field "WorldLerpHandler" is invalid, expect (function or nil), got %s', type(WorldLerpHandler)))
 
 		if isangle(offsetAng) then
 			offsetMatrix = offsetMatrix or Matrix()
@@ -472,6 +475,7 @@ UPManip.LerpBoneWorldByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 
 	local main = boneMapping.main
 	local keySort = boneMapping.keySort
+	local handler = boneMapping.WorldLerpHandler
 
 	for _, boneName in ipairs(keySort) do
 		local val = main[boneName]
@@ -479,14 +483,18 @@ UPManip.LerpBoneWorldByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		
 		local tarBoneName = val.tarBone
 		local offsetMatrix = val.offset
-		local handler = val.WorldLerpHandler
 
 		local newPos, newAng, newScale = LerpBoneWorld(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, offsetMatrix, silentlog)
 		-- 三个是一起返回的
 		if not newPos then continue end
 		
 		-- 注意, 使用自定义处理函数时, 必须返回所有三个值
-		if isfunction(handler) then newPos, newAng, newScale = handler(val, newPos, newAng, newScale, entOrSnapshot, boneName, tarEntOrSnapshot) end
+		if isfunction(handler) then 
+			newPos, newAng, newScale = handler(boneMapping, 
+				entOrSnapshot, boneName, tarEntOrSnapshot,
+				newPos, newAng, newScale, 
+			) 
+		end
 		if not newPos then continue end
 
 		local ent = GetEntFromSnapshot(entOrSnapshot)
@@ -501,6 +509,8 @@ UPManip.LerpBoneLocalByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 
 	local main = boneMapping.main
 	local keySort = boneMapping.keySort
+	local handler = boneMapping.LocalLerpHandler
+
 	for _, boneName in ipairs(keySort) do
 		local val = main[boneName]
 		val = istable(val) and val or emptyTable
@@ -509,14 +519,18 @@ UPManip.LerpBoneLocalByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		local parentName = val.custParent
 		local tarParentName = val.tarParent
 		local offsetMatrix = val.offset
-		local handler = val.LocalLerpHandler
 		
 		local newPos, newAng, newScale = LerpBoneLocal(t, entOrSnapshot, tarEntOrSnapshot, boneName, tarBoneName, parentName, tarParentName, offsetMatrix, silentlog)
 		-- 三个是一起返回的
 		if not newPos then continue end
 
 		-- 注意, 使用自定义处理函数时, 必须返回所有三个值
-		if isfunction(handler) then newPos, newAng, newScale = handler(val, newPos, newAng, newScale, entOrSnapshot, boneName, tarEntOrSnapshot) end
+		if isfunction(handler) then 
+			newPos, newAng, newScale = handler(boneMapping, 
+				entOrSnapshot, tarEntOrSnapshot, boneName
+				newPos, newAng, newScale
+			) 
+		end
 		if not newPos then continue end
 
 		local ent = GetEntFromSnapshot(entOrSnapshot)
