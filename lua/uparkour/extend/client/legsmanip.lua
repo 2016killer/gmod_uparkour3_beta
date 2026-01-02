@@ -4,11 +4,40 @@
 --]]
 
 -- ==============================================================
--- 定义骨骼映射
+-- 假的 GmodLegs3 
+-- 放弃将它作为工具的想法, 随便写吧...
 -- ==============================================================
-g_ManipBoneMapping = {
+if g_ManipLegs and isentity(g_ManipLegs.LegEnt) and IsValid(g_ManipLegs.LegEnt) then
+	g_ManipLegs.LegEnt:Remove()
+	local succ, msg = pcall(g_ManipLegs.UnRegister, g_ManipLegs)
+	if not succ then print('[UPExt]: LegsManip: UnRegister failed: ' .. msg) end
+end
+
+g_ManipLegs = {}
+
+local zerovec = Vector(0, 0, 0)
+local zeroang = Angle(0, 0, 0)
+local diagonalvec = Vector(1, 1, 1)
+local emptyTable = {}
+local ManipLegs = g_ManipLegs
+
+ManipLegs.ForwardOffset = -22
+
+ManipLegs.BonesToRemove = {
+	['veBiped.Bip01_Head1'] = true,
+	['veBiped.Bip01_L_Hand'] = true,
+	['veBiped.Bip01_L_Forearm'] = true,
+	['veBiped.Bip01_L_Upperarm'] = true,
+	['veBiped.Bip01_L_Clavicle'] = true,
+	['veBiped.Bip01_R_Hand'] = true,
+	['veBiped.Bip01_R_Forearm'] = true,
+	['veBiped.Bip01_R_Upperarm'] = true,
+	['veBiped.Bip01_R_Clavicle'] = true,
+	['veBiped.Bip01_Spine4'] = true,
+}
+
+ManipLegs.BoneMapping = {
 	main = {
-		['self'] = true,
 		['ValveBiped.Bip01_Pelvis'] = true,
 		['ValveBiped.Bip01_Spine'] = true,
 		['ValveBiped.Bip01_Spine1'] = true,
@@ -26,7 +55,6 @@ g_ManipBoneMapping = {
 	},
 
 	keySort = {
-		'self',
 		'ValveBiped.Bip01_Pelvis',
 		'ValveBiped.Bip01_Spine',
 		'ValveBiped.Bip01_Spine1',
@@ -44,315 +72,250 @@ g_ManipBoneMapping = {
 	}
 }
 
--- ==============================================================
--- 假的 GmodLegs3
--- ==============================================================
-if g_FakeGmodLegs3 and isentity(g_FakeGmodLegs3.LegEnt) and IsValid(g_FakeGmodLegs3.LegEnt) then
-	g_FakeGmodLegs3.LegEnt:Remove()
-end
 
-
-g_FakeGmodLegs3 = {}
-
-setmetatable(g_FakeGmodLegs3, {
-    __index = function(t, k)
-        local val = rawget(t, k)
-        if val ~= nil then
-            return val
-        end
-
-        return g_Legs and g_Legs[k]
-    end
-})
-
-g_FakeGmodLegs3.ForwardOffset = -22
-g_FakeGmodLegs3.RenderOverride = function(ent, renderMode)
-	-- 来自 [Gmod Legs 3]
-	-- Sorry, 我实在没看懂
-
-	if LocalPlayer():InVehicle() then
-		return
-	end
-
-	local self = g_FakeGmodLegs3
-	local ply = LocalPlayer()
-	
-	self.RenderPos = ply:Crouching() and ply:GetPos() or ply:GetPos() + Vector(0, 0, 5)
-	self.BiaisAngles = sharpeye_focus && sharpeye_focus.GetBiaisViewAngles && sharpeye_focus:GetBiaisViewAngles() || LocalPlayer():EyeAngles()
-	self.RenderAngle = Angle(0, self.BiaisAngles.y, 0)
-	self.RadAngle = math.rad(self.BiaisAngles.y)
-	self.RenderPos.x = self.RenderPos.x + math.cos(self.RadAngle) * self.ForwardOffset
-	self.RenderPos.y = self.RenderPos.y + math.sin(self.RadAngle) * self.ForwardOffset
-
-	if LocalPlayer():GetGroundEntity() == NULL then
-		self.RenderPos.z = self.RenderPos.z + 8
-		if LocalPlayer():KeyDown(IN_DUCK) then
-			self.RenderPos.z = self.RenderPos.z - 28
-		end
-	end
-
-	self.RenderColor = LocalPlayer():GetColor()
-
-	local bEnabled = render.EnableClipping(true)
-	render.PushCustomClipPlane(self.ClipVector, self.ClipVector:Dot(EyePos()))
-	render.SetColorModulation(self.RenderColor.r / 255, self.RenderColor.g / 255, self.RenderColor.b / 255)
-	render.SetBlend(self.RenderColor.a / 255)
-		ent:SetPos(self.RenderPos)
-		ent:SetAngles(self.RenderAngle)
-		ent:SetupBones()
-		ent:DrawModel()
-		ent:SetRenderOrigin()
-		ent:SetRenderAngles() 
-	render.SetBlend(1)
-	render.SetColorModulation(1, 1, 1)
-	render.PopCustomClipPlane()
-	render.EnableClipping(bEnabled)
-  
-	if not self.FirstRenderFinished then
-		self.FirstRenderFinished = true
-		if istable(self.TempData) then
-			hook.Run('UPExtFakeLegsFirstRender', unpack(self.TempData))
-		else
-			hook.Run('UPExtFakeLegsFirstRender')
-		end
-		self.TempData = nil
-	end
-end
-
-function g_FakeGmodLegs3:Think(maxseqgroundspeed)
-	-- 来自[Gmod Legs 3]
-	if not IsValid(self.LegEnt) then 
-		return
-	end
-
-	self.Velocity = LocalPlayer():GetVelocity():Length2D()
-
-	self.PlaybackRate = 1
-
-	if self.Velocity > 0.5 then
-		if maxseqgroundspeed < 0.001 then
-			self.PlaybackRate = 0.01
-		else
-			self.PlaybackRate = self.Velocity / maxseqgroundspeed
-			self.PlaybackRate = math.Clamp(self.PlaybackRate, 0.01, 10)
-		end
-	end
-
-	self.LegEnt:SetPlaybackRate(self.PlaybackRate)
-
-	self.Sequence = LocalPlayer():GetSequence()
-
-	if (self.LegEnt.Anim != self.Sequence) then
-		self.LegEnt.Anim = self.Sequence
-		self.LegEnt:ResetSequence(self.Sequence)
-	end
-
-	self.LegEnt:FrameAdvance(CurTime() - self.LegEnt.LastTick)
-	self.LegEnt.LastTick = CurTime()
-
-	self.BreathScale = sharpeye && sharpeye.GetStamina && math.Clamp(math.floor(sharpeye.GetStamina() * 5 * 10) / 10, 0.5, 5) || 0.5
-
-	if self.NextBreath <= CurTime() then
-		self.NextBreath = CurTime() + 1.95 / self.BreathScale
-		self.LegEnt:SetPoseParameter("breathing", self.BreathScale)
-	end
-
-	self.LegEnt:SetPoseParameter("move_x", (LocalPlayer():GetPoseParameter("move_x") * 2) - 1) -- Translate the walk x direction
-	self.LegEnt:SetPoseParameter("move_y", (LocalPlayer():GetPoseParameter("move_y") * 2) - 1) -- Translate the walk y direction
-	self.LegEnt:SetPoseParameter("move_yaw", (LocalPlayer():GetPoseParameter("move_yaw") * 360) - 180) -- Translate the walk direction
-	self.LegEnt:SetPoseParameter("body_yaw", (LocalPlayer():GetPoseParameter("body_yaw") * 180) - 90) -- Translate the body yaw
-	self.LegEnt:SetPoseParameter("spine_yaw",(LocalPlayer():GetPoseParameter("spine_yaw") * 180) - 90) -- Translate the spine yaw
-
-	if LocalPlayer():InVehicle() then
-		self.LegEnt:SetPoseParameter("vehicle_steer", (LocalPlayer():GetVehicle():GetPoseParameter("vehicle_steer") * 2) - 1) -- Translate the vehicle steering
-	end
-end
-
-hook.Add('UpdateAnimation', 'UPExtLegsManip', function(ply, velocity, maxseqgroundspeed)
-	if ply == LocalPlayer() then
-		local self = g_FakeGmodLegs3
-
-		if IsValid(self.LegEnt) and self.LegEnt:GetNoDraw() then
-			return
-		end
-
-		if IsValid(self.LegEnt) then
-			self:Think(maxseqgroundspeed)
-			if (string.lower(LocalPlayer():GetLegModel()) != string.lower(self.LegEnt:GetModel())) then
-				self:SetUp()
+ManipLegs.FRAME_LOOP_HOOK = {
+	{
+		EVENT_NAME = 'Think',
+		IDENTITY = 'UPExtLegsManip',
+		CALL = function()
+			if not IsValid(LocalPlayer()) then
+				return
 			end
-		else
-			self:SetUp()
+
+			local self = ManipLegs
+			self:UpdatePosition()
+			self:UpdateAnimation(FrameTime())
+		end
+	}
+}
+
+ManipLegs.MagicOffset = Vector(0, 0, 5)
+ManipLegs.MagicOffsetZ0 = 8
+ManipLegs.MagicOffsetZ1 = -28
+ManipLegs.LerpT = 0
+ManipLegs.FadeInSpeed = 1
+ManipLegs.FadeOutSpeed = 0.01
+ManipLegs.Speed = 0
+
+function ManipLegs:UpdatePosition()
+	-- 来自 [Gmod Legs 3]
+	if not IsValid(LocalPlayer()) then
+		return
+	end
+
+	local ply = LocalPlayer()
+	local IsPlyCrouching = ply:Crouching()
+	local BiaisAngles = sharpeye_focus && sharpeye_focus.GetBiaisViewAngles && sharpeye_focus:GetBiaisViewAngles() || LocalPlayer():EyeAngles()
+	local RadAngle = math.rad(BiaisAngles.y)
+
+	local newPos = IsPlyCrouching and ply:GetPos() or ply:GetPos() + self.MagicOffset
+	local newAngle = Angle(0, BiaisAngles.y, 0)
+	
+	newPos.x = newPos.x + math.cos(RadAngle) * self.ForwardOffset
+	newPos.y = newPos.y + math.sin(RadAngle) * self.ForwardOffset
+	if ply:GetGroundEntity() == NULL then
+		newPos.z = newPos.z + self.MagicOffsetZ0
+		if ply:KeyDown(IN_DUCK) then
+			newPos.z = newPos.z + self.MagicOffsetZ1
 		end
 	end
-end)
+	
+	self.newPos = newPos
+	self.newAngle = newAngle
 
-
-function g_FakeGmodLegs3:Init()
-	if self.LegEnt == g_Legs.LegEnt then
-		self.LegEnt = NULL
-	end
-	self:SetUp()
-
-	local succ = IsValid(self.LegEnt)
-
-	if not succ then 
-		return false 
+	if IsValid(self.LegEnt) then
+		self.LegEnt:SetPos(Vector())
+		// self.LegEnt:SetPos(newPos)
+		self.LegEnt:SetAngles(newAngle)
 	end
 
+end
 
-	for i = 0, self.LegEnt:GetBoneCount() - 1 do
-		local boneName = self.LegEnt:GetBoneName(i)
-		if g_ManipBoneMapping.main[boneName] then
-			self.LegEnt:ManipulateBonePosition(i, Vector(0, 0, 0))
-			self.LegEnt:ManipulateBoneAngles(i, Angle(0, 0, 0))
-			self.LegEnt:ManipulateBoneScale(i, Vector(1, 1, 1))
-		else
-			self.LegEnt:ManipulateBonePosition(i, Vector(0, 0, 0))
-			self.LegEnt:ManipulateBoneAngles(i, Angle(0, 0, 0))
-			self.LegEnt:ManipulateBoneScale(i, Vector(0, 0, 0))
-		end
+function ManipLegs:UpdateAnimation(dt)
+	if not IsValid(self.LegEnt) or not IsValid(LocalPlayer()) then
+		return
 	end
 
-	if not self.LegEnt.RenderOverride then
-		self.LegEnt.RenderOverride = self.RenderOverride
+	if self.LastTarget ~= self.Target then
+		self.LerpT = 0
+		hook.Run('UPExtLegsManipTargetChanged', self.LastTarget, self.Target)
+	end
+
+	if isentity(self.Target) and IsValid(self.Target) then
+		self.LerpT = math.Clamp(self.LerpT + self.FadeInSpeed * dt, 0, 1)
+
+		self.Target:SetupBones()
+		self.LegEnt:SetupBones()
+
+		UPManip.LerpBoneLocalByMapping(self.LerpT, 
+			self.LegEnt, self.Target, 
+			self.BoneMapping, false
+		)
+	else
+		self.LerpT = math.Clamp(self.LerpT + self.FadeOutSpeed * dt, 0, 1)
+		
+		LocalPlayer():SetupBones()
+		self.LegEnt:SetupBones()
+
+		UPManip.LerpBoneLocalByMapping(self.LerpT, 
+			self.LegEnt, LocalPlayer(), 
+			self.BoneMapping, false
+		)
+	end
+
+	self.LastTarget = self.Target
+end
+
+function ManipLegs:PushFrameLoop()
+	for _, v in ipairs(self.FRAME_LOOP_HOOK) do
+		print(v.EVENT_NAME, v.IDENTITY)
+		hook.Add(v.EVENT_NAME, v.IDENTITY, v.CALL)
+	end
+	
+	return true
+end
+
+function ManipLegs:PopFrameLoop()
+	for _, v in ipairs(self.FRAME_LOOP_HOOK) do
+		hook.Remove(v.EVENT_NAME, v.IDENTITY)
 	end
 
 	return true
 end
 
-function g_FakeGmodLegs3:Wake(...)
-	local succ = self:Init()
-	if not succ then return false end
+function ManipLegs:Init()
+	-- 来自 [Gmod Legs 3]
 
+	if not IsValid(LocalPlayer()) then
+		return false
+	end
+
+	local ply = LocalPlayer()
+	local LegEnt = self.LegEnt
 	
-	self.FirstRenderFinished = false
+	if not IsValid(LegEnt) then
+		LegEnt = ClientsideModel(ply:GetLegModel(), RENDER_GROUP_OPAQUE_ENTITY)	
+		self.LegEnt = LegEnt
+	else
+		LegEnt:SetModel(ply:GetLegModel())
+	end
+
+	LegEnt:SetNoDraw(false)
+
+	for k, v in pairs(ply:GetBodyGroups()) do
+		local current = ply:GetBodygroup(v.id)
+		LegEnt:SetBodygroup(v.id,  current)
+	end
+
+	for k, v in ipairs(LocalPlayer():GetMaterials()) do
+		LegEnt:SetSubMaterial(k - 1, LocalPlayer():GetSubMaterial(k - 1))
+	end
+
+	LegEnt:SetSkin(LocalPlayer():GetSkin())
+	LegEnt:SetMaterial(LocalPlayer():GetMaterial())
+	LegEnt:SetColor(LocalPlayer():GetColor())
+	LegEnt.GetPlayerColor = function()
+		return LocalPlayer():GetPlayerColor()
+	end
+
+	for i = 0, LegEnt:GetBoneCount() do
+		LegEnt:ManipulateBoneAngles(i, zeroang)
+		LegEnt:ManipulateBonePosition(i, zerovec)
+		LegEnt:ManipulateBoneScale(i, diagonalvec)
+	end
+
+	for boneName, v in pairs(self.BonesToRemove) do
+		local boneId = LegEnt:LookupBone(boneName)
+		if not boneId then 
+			continue 
+		end
+		
+		local manipVec, manipAng, manipScale = unpack(v or emptyTable)
+		manipVec = isvector(manipVec) and manipVec or zerovec
+		manipAng = isangle(manipAng) and manipAng or zeroang
+		manipScale = isvector(manipScale) and manipScale or zerovec
+
+		LegEnt:ManipulateBoneScale(boneId, manipScale)
+		LegEnt:ManipulateBonePosition(boneId, manipVec)
+		LegEnt:ManipulateBoneAngles(boneId, manipAng)
+	end
+
+	return true
+end
+
+function ManipLegs:Wake()
+	local succ = self:Init()
+	succ = succ and self:PushFrameLoop()
+
+	if not succ then
+		return false
+	end
+
+	self.LegEnt:SetParent(ply)
 	self.LegEnt:SetNoDraw(false)
 
-	hook.Run('UPExtFakeLegsWake', ...)
-	self.TempData = {...}
+	hook.Run('UPExtLegsManipWake', self.LegEnt)
 
 	return true
 end
 
-function g_FakeGmodLegs3:Sleep(...)
+function ManipLegs:Sleep()
 	local succ = self:Init()
-	if not succ then return false end
+	succ = succ and self:PopFrameLoop()
 
-	self.LegEnt:SetNoDraw(true)
-	self.FirstRenderFinished = false
+	if not succ then
+		return false
+	end
 
-	hook.Run('UPExtFakeLegsSleep', ...)
+	self.LegEnt:SetParent(nil)
+	self.LegEnt:SetNoDraw(false)
+
+	hook.Run('UPExtLegsManipSleep', self.LegEnt)
 
 	return true
 end
 
--- ==============================================================
---[[
-	由于 UPManip 对实体位置有非常严格的要求, 再者 Gmod Legs 3 的源代码无法满足低入侵修改, 于是有了此。
-	这里实在容易让人感到困惑、混乱。
-	由于是懒加载, 所以在启动 UPManip 时必须完成位姿更新。
-]]--
--- 放弃将它作为工具的想法, 随便写吧...
--- ==============================================================
+ManipLegs.MAIN_EVENT = {
+	{
+		IDENTITY = 'UPExtLegsManip',
+		EVENT_NAME = 'VMLegsPostPlayAnim',
+		CALL = function(anim)
+			if not IsValid(VMLegs.LegModel) or not IsValid(VMLegs.LegParent) then
+				print('[UPExt]: LegsManip: VMLegs has not been started yet!')
+				return
+			end
+			print('ssss')
+			VMLegs.LegModel:SetNoDraw(true)
 
-local function FadeInIterator(dt, curtime, data)
-	local t = data.t
-	local speed = data.speed
-	local fadeInSpeed = data.fadeInSpeed
-	local fadeOutSpeed = data.fadeOutSpeed
-	local target = data.target
-	local fadeInTarget = data.fadeInTarget
-	local fadeOutTarget = data.fadeOutTarget
-	local ent = data.ent
-	local boneMapping = data.boneMapping
+			local self = ManipLegs
+			self.LerpT = 0
+			self.Target = VMLegs.LegParent
+			print(self:Wake())
+		end
+	}
+}
 
-	t = math.Clamp(t + speed * dt, 0, 1)
-	data.t = t
-
-	if not isentity(ent) or not IsValid(ent) then
-		print('[FrameLoop]: LegsManipEnt is invalid!')
-		return true
+function ManipLegs:Register()
+	print('[UPExt]: LegsManip: Register')
+	for _, v in ipairs(self.MAIN_EVENT) do
+		hook.Add(v.EVENT_NAME, v.IDENTITY, v.CALL)
 	end
-
-	if isentity(target) and IsValid(target) then
-		target:SetupBones()
-		ent:SetupBones()
-		UPManip.LerpBoneWorld(t, ent, target, boneMapping, true)
-	elseif isentity(fadeOutTarget) and IsValid(fadeOutTarget) then
-		data.target = fadeOutTarget
-		data.t = 0
-		data.speed = data.fadeOutSpeed
-		ent:SetParent(fadeOutTarget)
-		return
-	else
-		print('[FrameLoop]: fadeOutTarget is invalid!')
-		return true
-	end
-
-	local popFlag = target == fadeOutTarget and t >= 1
-
-	if popFlag and data.removeFlag then
-		ent:Remove()
-	end
-
-	return popFlag
 end
 
-hook.Add('UParPopFrameLoop', 'dube', function(...)
-	print(...)
-end)
-
-hook.Add('UPExtFakeLegsFirstRender', 'StartLegsManip', function(anim, LegsManipEnt)
-	if not IsValid(VMLegs.LegModel) or not IsValid(VMLegs.LegParent) then
-		print('[UPExt]: LegsManip: VMLegs has not been started yet!')
-		return
+function ManipLegs:UnRegister()
+	print('[UPExt]: LegsManip: UnRegister')
+	for _, v in ipairs(self.MAIN_EVENT) do
+		hook.Remove(v.EVENT_NAME, v.IDENTITY)
 	end
 
-	if not isentity(LegsManipEnt) or not IsValid(LegsManipEnt) then
-		print('[UPExt]: LegsManipEnt is invalid!')
-		return
+	for _, v in ipairs(self.FRAME_LOOP_HOOK) do
+		hook.Remove(v.EVENT_NAME, v.IDENTITY)
 	end
-
-	VMLegs.LegModel:SetNoDraw(true)
-
-	LegsManipEnt:SetPos(g_FakeGmodLegs3.LegEnt:GetPos())
-	LegsManipEnt:SetAngles(g_FakeGmodLegs3.LegEnt:GetAngles())
-	LegsManipEnt:SetParent(g_FakeGmodLegs3.LegEnt)
-
-	local animData = VMLegs:GetAnim(anim)
-	local fadeInSpeed = istable(animData) and animData.lerp_speed_in
-	fadeInSpeed = math.max(isnumber(fadeInSpeed) and fadeInSpeed or 0.1, 0.01)
-
-	local fadeOutSpeed = istable(animData) and animData.lerp_speed_out
-	fadeOutSpeed = math.max(isnumber(fadeOutSpeed) and fadeOutSpeed or 0.1, 0.01)
-
-	local fadeInTarget = VMLegs.LegParent
-	local fadeOutTarget = g_FakeGmodLegs3.LegEnt
-
-	UPar.PushFrameLoop('LegsManipFrameLoop', FadeInIterator, {
-		t = 0,
-		speed = fadeInSpeed,
-		fadeInSpeed = fadeInSpeed,
-		fadeOutSpeed = fadeOutSpeed,
-		target = fadeInTarget,
-		fadeInTarget = fadeInTarget,
-		fadeOutTarget = fadeOutTarget,
-		ent = LegsManipEnt,
-		boneMapping = g_ManipBoneMapping,
-		removeFlag = true
-	}, 10)
-end)
+end
 
 
-hook.Add('VMLegsPostPlayAnim', 'StartLegsManip', function(anim)
-	local fkingLegs = ClientsideModel(LocalPlayer():GetModel(), RENDERGROUP_OTHER)
-
-	local succ = g_FakeGmodLegs3:Wake(anim, fkingLegs)
-	if not succ then
-		print('[UPExt]: LegsManip start faild!')
-	end
-end)
+g_ManipLegs:Init()
+g_ManipLegs:Register()
 -- ==============================================================
 -- 菜单
 -- ==============================================================

@@ -258,19 +258,81 @@ local function GetEntBonesFamilyLevel(ent, useLRU2)
 	return familyLevel
 end
 
+local function CreateSnapshotWorld(ent, boneMapping)
+	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
+	assert(isentity(ent) and IsValid(ent), 'ent is invaild, expect valid entity')
+	assert(istable(boneMapping), 'boneMapping is invaild, expect table')
+	assert(istable(boneMapping.keySort), 'boneMapping.keySort is invaild, expect table')
+	assert(istable(boneMapping.main), 'boneMapping.main is invaild, expect table')
+
+	local keySort = boneMapping.keySort
+
+	local matTbl = {}
+	local snapshot = {ent = ent, matTbl = matTbl, type = 'world'}
+	for i, boneName in pairs(keySort) do
+		local worldMatrix, boneId = GetBoneMatrix(ent, boneName)
+		matTbl[boneName] = {worldMatrix, boneId}
+	end
+
+	return snapshot
+end
+
+local function CreateSnapshotLocal(ent, boneMapping)
+	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
+	assert(isentity(ent) and IsValid(ent), 'ent is invaild, expect valid entity')
+	assert(istable(boneMapping), 'boneMapping is invaild, expect table')
+	assert(istable(boneMapping.keySort), 'boneMapping.keySort is invaild, expect table')
+	assert(istable(boneMapping.main), 'boneMapping.main is invaild, expect table')
+
+	local keySort = boneMapping.keySort
+	local main = boneMapping.main
+
+	local matTbl = {}
+	local snapshot = {ent = ent, matTbl = matTbl, type = 'local'}
+	for i, boneName in pairs(keySort) do
+		local mappindData = main[boneName]
+		local parentName = istable(mappindData) and mappindData.custParent or nil
+		local localMatrix, boneId = GetBoneMatrixLocal(ent, boneName, parentName)
+		matTbl[boneName] = {localMatrix, boneId}
+	end
+
+	return snapshot
+end
+
+local function UnpackSnapshot(entOrSnapshot, boneName, silentlog)
+	if istable(entOrSnapshot) and entOrSnapshot.type == 'world' then
+		return unpack(entOrSnapshot.matTbl[boneName])
+	elseif isentity(entOrSnapshot) and IsValid(entOrSnapshot) then
+		return GetBoneMatrix(entOrSnapshot, boneName)
+	else
+		Log(string.format('[UPManip.UnpackSnapshot]: invaild entOrSnapshot "%s", expect snapshotWorld(table) or valid entity', entOrSnapshot), silentlog)
+	end
+end
+
+local function UnpackSnapshotLocal(entOrSnapshot, boneName, parentName, silentlog)
+	if istable(entOrSnapshot) and entOrSnapshot.type == 'local' then
+		return unpack(entOrSnapshot.matTbl[boneName])
+	elseif isentity(entOrSnapshot) and IsValid(entOrSnapshot) then
+		return GetBoneMatrixLocal(entOrSnapshot, boneName, parentName)
+	else
+		Log(string.format('[UPManip.UnpackSnapshotLocal]: invaild entOrSnapshot "%s", expect snapshotLocal(table) or valid entity', entOrSnapshot), silentlog)
+	end
+end
+
+
 local function LerpBoneWorld(t, ent, tarEnt, boneName, tarBoneName, offsetMatrix, silentlog)
 	-- 不传入 tarBoneName 则使用恒等映射
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local curMatrix, boneId = GetBoneMatrix(ent, boneName)
+	local curMatrix, boneId = UnpackSnapshot(ent, boneName, silentlog)
 	if not curMatrix then 
 		Log(string.format('[UPManip.LerpBoneWorld]: can not find curMatrix, boneName: "%s", ent "%s"', boneName, ent), silentlog)
 		return nil
 	end
 
 	tarBoneName = tarBoneName or boneName
-	local tarMatrix = GetBoneMatrix(tarEnt, tarBoneName)
+	local tarMatrix = UnpackSnapshot(tarEnt, tarBoneName, silentlog)
 	if not tarMatrix then 
 		Log(string.format('[UPManip.LerpBoneWorld]: can not find tarMatrix, tarBoneName: "%s", tarEnt "%s"', tarBoneName, tarEnt), silentlog)
 		return nil
@@ -289,7 +351,7 @@ local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, 
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local curMatrixLocal, boneId = GetBoneMatrixLocal(ent, boneName, parentName)
+	local curMatrixLocal, boneId = UnpackSnapshotLocal(ent, boneName, parentName, silentlog)
 	if not curMatrixLocal then
 		Log(string.format('[UPManip.LerpBoneLocal]: get local matrix failed, boneName: "%s", ent "%s"', boneName, ent), silentlog)
 		return nil
@@ -297,7 +359,7 @@ local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, 
 
 	tarBoneName = tarBoneName or boneName
 	tarParentName = tarParentName or parentName
-	local tarMatrixLocal = GetBoneMatrixLocal(tarEnt, tarBoneName, tarParentName)
+	local tarMatrixLocal = UnpackSnapshotLocal(tarEnt, tarBoneName, tarParentName, silentlog)
 	if not tarMatrixLocal then 
 		Log(string.format('[UPManip.LerpBoneLocal]: fail to get targetBoneMatrix, boneName: "%s", target "%s"', tarBoneName, tarEnt), silentlog)
 		return nil
