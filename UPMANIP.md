@@ -74,11 +74,15 @@
 ```
 
 ![client](./materials/upgui/client.jpg)
-**angle**, **vector** UPManip.SetBonePositionLocal(**entity** ent, **string** boneName, **vector** posl, **angle** angl, **bool** silentlog)
+**angle**, **vector** UPManip.SetBonePositionLocal(**entity** ent, **string** boneName, **string** parentName, **vector** posl, **angle** angl, **bool** silentlog)
 ```note
-按局部空间（相对父骨骼/实体）控制指定骨骼的位置和角度, 需每帧更新。
-支持 'self' 关键字表示实体本身, 此时直接设置实体世界位置和角度。
-调用前建议执行 ent:SetupBones(), 避免获取错误骨骼矩阵。
+按局部空间（相对自定义父骨骼/实体）控制指定骨骼的位置和角度，需每帧更新。
+参数 parentName: 自定义父骨骼名，支持 'self' 关键字，默认为 nil（使用骨骼默认父级），用于指定局部空间的参考系。
+支持 'self' 关键字表示实体本身，此时直接设置实体世界位置和角度。
+内部分支逻辑：
+1.  当骨骼默认父级与传入的自定义父级一致时，直接通过`ent:ManipulateBonexxx`操作骨骼姿态（针对性优化）；
+2.  当父级不一致时，通过父级世界矩阵与目标局部矩阵计算出世界变换矩阵，调用`SetBonePosition`完成设置。
+调用前建议执行 ent:SetupBones()，避免获取错误骨骼矩阵；父矩阵无效/矩阵奇异时打印日志并返回nil。
 ```
 
 ![client](./materials/upgui/client.jpg)

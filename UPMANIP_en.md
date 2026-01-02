@@ -87,15 +87,15 @@ This is already the easiest to use; the others are even bigger pieces of shit.
 ```
 
 ![client](./materials/upgui/client.jpg)
-
-**angle**, **vector** UPManip.SetBonePositionLocal(**entity** ent, **string** boneName, **vector** posl, **angle** angl, **bool** silentlog)
-
+**angle**, **vector** UPManip.SetBonePositionLocal(**entity** ent, **string** boneName, **string** parentName, **vector** posl, **angle** angl, **bool** silentlog)
 ```note
-
-Controls the position and angle of the specified bone in local space (relative to the parent bone/entity). Requires updating every frame.
+Controls the position and angle of the specified bone in local space (relative to the custom parent bone/entity). Requires updating every frame.
+Parameter parentName: Custom parent bone name, supports the 'self' keyword, default is nil (uses the bone's default parent), which is used to specify the reference frame of the local space.
 Supports the 'self' keyword to represent the entity itself, in which case it directly sets the entity's world position and angle.
-It's recommended to execute ent:SetupBones() before calling to avoid obtaining incorrect bone matrices.
-
+Internal branch logic:
+1.  When the bone's default parent is consistent with the incoming custom parent, directly manipulates the bone posture through `ent:ManipulateBonexxx` (targeted optimization);
+2.  When the parents are inconsistent, calculates the world transformation matrix through the parent's world matrix and the target local matrix, and calls `SetBonePosition` to complete the setting.
+It's recommended to execute ent:SetupBones() before calling to avoid obtaining incorrect bone matrices. Prints a log and returns nil if the parent matrix is invalid or the matrix is singular.
 ```
 
 ![client](./materials/upgui/client.jpg)

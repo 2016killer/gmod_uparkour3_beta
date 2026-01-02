@@ -115,33 +115,26 @@ local function SetBonePosition(ent, boneName, posw, angw, silentlog)
 end
 
 local function GetBoneMatrixLocal(ent, boneName, parentName, invert)
-	-- 这里 parentName 参数是为插值而设计的, 因为 ent 骨骼映射到不同的实体上时, 父级可能会不同
-
+	-- 这里 parentName 是为了支持自定义父级, 默认为 nil, 表示使用实体的默认父级
 	-- 在这里, 我们将实体本身的父级视为 World
-	if boneName == 'self' then 
-		return ent:GetWorldTransformMatrix(), -1, -1
-	end
+	
+	local boneMatrix, boneId = GetBoneMatrix(ent, boneName)
+	if not boneId or boneId == -1 then return boneMatrix end
 
-	local boneId = ent:LookupBone(boneName)
-	if not boneId then return nil end
-	local boneMatrix = ent:GetBoneMatrix(boneId)
-	if not boneMatrix then return nil end
-
-	local parentId = nil
+	local parentMatrix, parentId = nil
 	if parentName then
-		parentId = parentName == 'self' and -1 or ent:LookupBone(parentName)
+		parentMatrix, parentId = GetBoneMatrix(ent, parentName)
 	else
 		parentId = ent:GetBoneParent(boneId)
+		parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
 	end
-
-	local parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
 	if not parentMatrix then return nil end
 
 	if invert then
 		if IsMatrixSingular(parentMatrix) then return nil end
 		local boneMatrixInvert = GetInverse(boneMatrix)
 		if not boneMatrixInvert then return nil end
-		return boneMatrixInvert * parentMatrix, parentId
+		return boneMatrixInvert * parentMatrix, boneId, parentId
 	else
 		if IsMatrixSingular(boneMatrix) then return nil end
 		local parentMatrixInvert = GetInverse(parentMatrix)
@@ -150,7 +143,10 @@ local function GetBoneMatrixLocal(ent, boneName, parentName, invert)
 	end
 end
 
-local function SetBonePositionLocal(ent, boneName, posl, angl, silentlog) 
+local function SetBonePositionLocal(ent, boneName, parentName, posl, angl, silentlog) 
+	-- 考虑到自定义父级的情况, 这里需要传入父级名称
+	-- 内部可能使用 UPManip.SetBonePosition 来设置位置, 这要看传入的父级是否为默认父级
+
 	-- 必须传入非奇异矩阵, 如果骨骼或父级的变换是奇异的, 则可能出现问题
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
@@ -163,34 +159,41 @@ local function SetBonePositionLocal(ent, boneName, posl, angl, silentlog)
 		return posl, angl
 	end
 	
-	local curLocalTransformInvert, boneId, parentId = GetBoneMatrixLocal(ent, boneName, nil, true)
+	local curLocalTransformInvert, boneId, parentId = GetBoneMatrixLocal(ent, boneName, parentName, true)
 	if not curLocalTransformInvert then 
 		Log(string.format('[UPManip.SetBonePositionLocal]: ent "%s" boneName "%s" GetBoneMatrixLocal failed', ent, boneName), silentlog)
 		return nil 
 	end
 
-	local curAngManip = Matrix()
-	curAngManip:SetAngles(ent:GetManipulateBoneAngles(boneId))
-	
-	local curPosManip = Matrix()
-	curPosManip:SetTranslation(ent:GetManipulateBonePosition(boneId))
-
 	local tarMat = Matrix()
 	tarMat:SetAngles(angl)
 	tarMat:SetTranslation(posl)
 
+	if ent:GetBoneParent(boneId) == parentId then
+		-- 这算优化吗? 没算过
+		local curAngManip = Matrix()
+		curAngManip:SetAngles(ent:GetManipulateBoneAngles(boneId))
+		
+		local curPosManip = Matrix()
+		curPosManip:SetTranslation(ent:GetManipulateBonePosition(boneId))
 
-	local newAngManip = curAngManip * curLocalTransformInvert * tarMat
-	local newPosManip = tarMat * curLocalTransformInvert * curPosManip
+		local newAngManip = curAngManip * curLocalTransformInvert * tarMat
+		local newPosManip = tarMat * curLocalTransformInvert * curPosManip
 
-	local newManipAng = newAngManip:GetAngles()
-	local newManipPos = newPosManip:GetTranslation()
+		local newManipAng = newAngManip:GetAngles()
+		local newManipPos = newPosManip:GetTranslation()
 
 
-	ent:ManipulateBoneAngles(boneId, newManipAng)
-	ent:ManipulateBonePosition(boneId, newManipPos)
+		ent:ManipulateBoneAngles(boneId, newManipAng)
+		ent:ManipulateBonePosition(boneId, newManipPos)
 
-	return newManipAng, newManipPos
+		return newManipAng, newManipPos
+	else
+		-- 在 GetBoneMatrixLocal 暗含了 parentMatrix 的存在性和奇异验证, 所以这里没问题
+		local parentMatrix = parentId == -1 and ent:GetWorldTransformMatrix() or ent:GetBoneMatrix(parentId)
+		local newTransform = parentMatrix * tarMat
+		return SetBonePosition(ent, boneId, newTransform:GetTranslation(), newTransform:GetAngles(), silentlog)
+	end
 end
 
 local function MarkBoneFamilyLevel(boneId, currentLevel, family, familyLevel, cached)
@@ -309,7 +312,7 @@ local function LerpBoneLocal(t, ent, tarEnt, boneName, tarBoneName, parentName, 
 
 	local newPos = LerpVector(t, curMatrixLocal:GetTranslation(), tarMatrixLocal:GetTranslation())
 	local newAng = LerpAngle(t, curMatrixLocal:GetAngles(), tarMatrixLocal:GetAngles())
-	local newManipPos, newManipAng = SetBonePositionLocal(ent, boneName, newPos, newAng, silentlog)
+	local newManipPos, newManipAng = SetBonePositionLocal(ent, boneName, parentName, newPos, newAng, silentlog)
 	return newManipPos, newManipAng, newManipScale
 end
 
@@ -484,6 +487,7 @@ concommand.Add('upmanip_test_local', function(ply)
 
 	local boneMapping = {
 		main = {
+			['ValveBiped.Bip01_Spine'] = true,
 			['ValveBiped.Bip01_Spine1'] = true,
 			['ValveBiped.Bip01_Spine2'] = true,
 			['ValveBiped.Bip01_L_Clavicle'] = true,
@@ -498,6 +502,7 @@ concommand.Add('upmanip_test_local', function(ply)
 			['ValveBiped.Bip01_Head1'] = true,
 		},
 		keySort = {
+			'ValveBiped.Bip01_Spine',
 			'ValveBiped.Bip01_Spine1',
 			'ValveBiped.Bip01_Spine2',
 			'ValveBiped.Bip01_L_Clavicle',
