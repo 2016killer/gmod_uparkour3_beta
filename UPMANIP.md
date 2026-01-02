@@ -210,7 +210,7 @@
 参数 entOrSnapshot/tarEntOrSnapshot: 支持实体（entity）或世界空间快照（table, 由SnapshotWorld生成）。
 参数 boneMapping: 需先通过 UPManip.InitBoneMappingOffset 初始化验证, 包含 main、keySort 和可选 WorldLerpHandler。
 参数 scaling: 是否启用骨骼缩放同步, true时自动调用 SetBoneScale 设置插值后的缩放比例。
-参数 WorldLerpHandler: 全局回调函数, 格式为 handler(boneMapping, entOrSnapshot, tarEntOrSnapshot, boneName, newPos, newAng, newScale), 可自定义修改插值结果, 需返回三个值（pos/ang/scale）。
+参数 WorldLerpHandler: 全局回调函数, 格式为 handler(boneMapping, entOrSnapshot, tarEntOrSnapshot, boneName, newPos, newAng, newScale, t), 可自定义修改插值结果, 需返回三个值（pos/ang/scale）。
 内部按 ipairs 遍历 keySort, 自动处理骨骼偏移和恒等映射, 插值失败时跳过当前骨骼, 不影响其他骨骼执行。
 需每帧更新, 调用前建议执行 ent:SetupBones() 和 tarEnt:SetupBones()（传入实体时）。
 ```
@@ -222,7 +222,7 @@
 参数 entOrSnapshot/tarEntOrSnapshot: 支持实体（entity）或局部空间快照（table, 由SnapshotLocal生成）。
 参数 boneMapping: 需先通过 UPManip.InitBoneMappingOffset 初始化验证, 包含 main、keySort 和可选 LocalLerpHandler。
 参数 scaling: 是否启用骨骼缩放同步, true时自动调用 SetBoneScale 设置插值后的缩放比例。
-参数 LocalLerpHandler: 全局回调函数, 格式为 handler(boneMapping, entOrSnapshot, tarEntOrSnapshot, boneName, newPos, newAng, newScale), 可自定义修改插值结果, 需返回三个值（pos/ang/scale）。
+参数 LocalLerpHandler: 全局回调函数, 格式为 handler(boneMapping, entOrSnapshot, tarEntOrSnapshot, boneName, newPos, newAng, newScale, t), 可自定义修改插值结果, 需返回三个值（pos/ang/scale）。
 内部按 ipairs 遍历 keySort, 自动读取 custParent/tarParent 配置和偏移矩阵, 插值失败时跳过当前骨骼, 不影响其他骨骼执行。
 支持自定义父骨骼配置, 灵活性更高, 需每帧更新。
 ```

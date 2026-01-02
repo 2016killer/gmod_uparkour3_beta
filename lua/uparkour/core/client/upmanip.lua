@@ -491,7 +491,7 @@ UPManip.LerpBoneWorldByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		if isfunction(handler) then 
 			newPos, newAng, newScale = handler(boneMapping, 
 				entOrSnapshot, tarEntOrSnapshot, boneName,
-				newPos, newAng, newScale
+				newPos, newAng, newScale, t
 			) 
 		end
 		if not newPos then continue end
@@ -527,7 +527,7 @@ UPManip.LerpBoneLocalByMapping = function(t, entOrSnapshot, tarEntOrSnapshot, bo
 		if isfunction(handler) then 
 			newPos, newAng, newScale = handler(boneMapping, 
 				entOrSnapshot, tarEntOrSnapshot, boneName,
-				newPos, newAng, newScale
+				newPos, newAng, newScale, t
 			) 
 		end
 		if not newPos then continue end
