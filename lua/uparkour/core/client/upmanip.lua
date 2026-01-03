@@ -10,7 +10,8 @@
 	地增加了调试难度, 有点像GPU编程, 操, 所以我并不推荐使用这些。
 
 	插值需要指定骨骼映射和其排序, GetEntBonesFamilyLevel(ent, useLRU2) 可以辅助排序,
-	完成后再手动编码。
+	完成后再手动编码, 为什么我不写自动排序? 因为有些骨架虽然骨骼名相同, 但是他们家装(节点)关系混乱,
+	比如 cw2 的 c_hand。
 
 	这里的可选的插值分为两种 LerpBoneWorld 和 LerpBoneLocal
 	如果从本质来看, 世界空间的插值可以看做一种特殊的局部空间插值, 只是将所有骨骼的父级都看作是 World,
@@ -52,8 +53,11 @@ local CALL_FLAG_LERP_LOCAL = 0x2000
 local CALL_FLAG_SET_POSITION = 0x4000
 local CALL_FLAG_SNAPSHOT = 0x8000
 local ERR_FLAG_LERP_METHOD = 0x10000
+local CALL_FLAG_SET_POS = 0x20000
+local CALL_FLAG_SET_ANG = 0x40000
+local CALL_FLAG_SET_SCALE = 0x80000
 
-local RUNTIME_FLAG_LOG = {
+local RUNTIME_FLAG_MSG = {
 	[SUCC_FLAG] = nil,
 	[ERR_FLAG_BONEID] = 'can not find boneId',
 	[ERR_FLAG_MATRIX] = 'can not find Matrix',
@@ -74,11 +78,11 @@ local RUNTIME_FLAG_LOG = {
 	[CALL_FLAG_LERP_WORLD] = 'call: lerp in local space',
 	[CALL_FLAG_SET_POSITION] = 'call: set position',
 	[CALL_FLAG_SNAPSHOT] = 'call: snapshot',
-	[ERR_FLAG_LERP_METHOD] = 'invalid lerp method'
+	[ERR_FLAG_LERP_METHOD] = 'invalid lerp method',
+	[CALL_FLAG_SET_POS] = 'call: set position',
+	[CALL_FLAG_SET_ANG] = 'call: set angle',
+	[CALL_FLAG_SET_SCALE] = 'call: set scale',
 }
-
-UPManip.RUNTIME_FLAG_LOG = RUNTIME_FLAG_LOG
-
 
 local function IsMatrixSingular(mat)
 	-- 这个方法并不严谨, 只是工程化方案, 比直接求逆快很多
@@ -109,55 +113,7 @@ local function GetMatrixLocal(mat, parentMat, invert)
 	end
 end
 
-UPManip.GetMatrixLocal = GetMatrixLocal
-UPManip.IsMatrixSingular = IsMatrixSingular
-UPManip.InitBoneIterator = function(boneIterator)
-	-- 主要是验证参数类型和初始化偏移矩阵
-	-- parent 和 tarParent 字段仅对局部空间插值有效
 
-	assert(istable(boneIterator), string.format('invalid boneIterator, expect table, got %s', type(boneIterator)))
-	assert(istable(boneIterator.main), string.format('invalid boneIterator.main, expect table, got %s', type(boneIterator.main)))
-
-	for _, mappingData in pairs(boneIterator.main) do
-		assert(istable(mappingData), string.format('boneIterator.main value is invalid, expect table, got %s', type(mappingData)))
-		assert(isstring(mappingData.bone), string.format('field "bone" is invalid, expect string, got %s', type(mappingData.bone)))
-		assert(isstring(mappingData.tarBone) or mappingData.tarBone == nil, string.format('field "tarBone" is invalid, expect (string or nil), got %s', type(mappingData.tarBone)))
-		assert(isstring(mappingData.parent) or mappingData.parent == nil, string.format('field "parent" is invalid, expect (string or nil), got %s', type(mappingData.parent)))
-		assert(isstring(mappingData.tarParent) or mappingData.tarParent == nil, string.format('field "tarParent" is invalid, expect (string or nil), got %s', type(mappingData.tarParent)))
-
-		if ismatrix(mappingData.offset) then
-			continue
-		end
-
-		local offsetMatrix = nil
-		local offsetAng = mappingData.ang
-		local offsetPos = mappingData.pos
-		local offsetScale = mappingData.scale
-
-		assert(isangle(offsetAng) or offsetAng == nil, string.format('field "ang" is invalid, expect (angle or nil), got %s', type(offsetAng)))
-		assert(isvector(offsetPos) or offsetPos == nil, string.format('field "pos" is invalid, expect (vector or nil), got %s', type(offsetPos)))
-		assert(isvector(offsetScale) or offsetScale == nil, string.format('field "scale" is invalid, expect (vector or nil), got %s', type(offsetScale)))
-
-		if isangle(offsetAng) then
-			offsetMatrix = offsetMatrix or Matrix()
-			offsetMatrix:SetAngles(offsetAng)
-		end
-
-		if isvector(offsetPos) then
-			offsetMatrix = offsetMatrix or Matrix()
-			offsetMatrix:SetTranslation(offsetPos)
-		end
-
-		if isvector(offsetScale) then
-			offsetMatrix = offsetMatrix or Matrix()
-			offsetMatrix:SetScale(offsetScale)
-		end
-
-		if offsetMatrix then
-			val.offset = offsetMatrix
-		end
-	end
-end
 
 local function __internal_MarkBoneFamilyLevel(boneId, currentLevel, family, familyLevel, cached)
 	cached = cached or {}
@@ -217,20 +173,20 @@ function ENTITY:UPMaSetBonePosition(boneName, posw, angw)
 	-- 应该还能再优化
 
 	local boneId = self:LookupBone(boneName)
-	if not boneId then return nil, ERR_FLAG_BONEID end
+	if not boneId then return bit.bor(ERR_FLAG_BONEID, CALL_FLAG_SET_POSITION) end
 	
 	local curTransform = self:GetBoneMatrix(boneId)
-	if not curTransform then return nil, bit.bor(ERR_FLAG_MATRIX, CALL_FLAG_SET_POSITION) end
+	if not curTransform then return bit.bor(ERR_FLAG_MATRIX, CALL_FLAG_SET_POSITION) end
 	
 	local parentId = self:GetBoneParent(boneId)
 	local parentTransform = parentId == -1 and self:GetWorldTransformMatrix() or self:GetBoneMatrix(parentId)
-	if not parentTransform then return nil, bit.bor(ERR_FLAG_PARENT, CALL_FLAG_SET_POSITION) end
+	if not parentTransform then return bit.bor(ERR_FLAG_PARENT, CALL_FLAG_SET_POSITION) end
 
 	local curTransformInvert = GetInverse(curTransform)
-	if not curTransformInvert then return nil, bit.bor(ERR_FLAG_SINGULAR, CALL_FLAG_SET_POSITION) end
+	if not curTransformInvert then return bit.bor(ERR_FLAG_SINGULAR, CALL_FLAG_SET_POSITION) end
 
 	local parentTransformInvert = GetInverse(parentTransform)
-	if not parentTransformInvert then return nil, bit.bor(ERR_FLAG_PARENT_SINGULAR, CALL_FLAG_SET_POSITION) end
+	if not parentTransformInvert then return bit.bor(ERR_FLAG_PARENT_SINGULAR, CALL_FLAG_SET_POSITION) end
 
 
 	local curAngManip = Matrix()
@@ -248,6 +204,69 @@ function ENTITY:UPMaSetBonePosition(boneName, posw, angw)
 	self:ManipulateBoneAngles(boneId, newManipAng)
 	self:ManipulateBonePosition(boneId, newManipPos)
 
+	return SUCC_FLAG
+end
+
+function ENTITY:UPMaSetBonePos(boneName, posw) 
+	-- 必须传入非奇异矩阵, 如果骨骼或父级的变换是奇异的, 则可能出现问题
+	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
+	-- 一般放在帧循环中
+	-- 应该还能再优化
+
+	local boneId = self:LookupBone(boneName)
+	if not boneId then return bit.bor(ERR_FLAG_BONEID, CALL_FLAG_SET_POS) end
+	
+	local curTransform = self:GetBoneMatrix(boneId)
+	if not curTransform then return bit.bor(ERR_FLAG_MATRIX, CALL_FLAG_SET_POS) end
+	
+	local parentId = self:GetBoneParent(boneId)
+	local parentTransform = parentId == -1 and self:GetWorldTransformMatrix() or self:GetBoneMatrix(parentId)
+	if not parentTransform then return bit.bor(ERR_FLAG_PARENT, CALL_FLAG_SET_POS) end
+
+	local parentTransformInvert = GetInverse(parentTransform)
+	if not parentTransformInvert then return bit.bor(ERR_FLAG_PARENT_SINGULAR, CALL_FLAG_SET_POS) end
+
+	local newManipPos = parentTransformInvert
+		* (posw - curTransform:GetTranslation() + parentTransform:GetTranslation())
+		+ self:GetManipulateBonePosition(boneId)
+
+	self:ManipulateBonePosition(boneId, newManipPos)
+
+	return SUCC_FLAG
+end
+
+function ENTITY:UPMaSetBoneAng(boneName, angw)
+	-- 必须传入非奇异矩阵, 如果骨骼或父级的变换是奇异的, 则可能出现问题
+	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
+	-- 一般放在帧循环中
+	-- 应该还能再优化
+
+	local boneId = self:LookupBone(boneName)
+	if not boneId then return bit.bor(ERR_FLAG_BONEID, CALL_FLAG_SET_ANG) end
+	
+	local curTransform = self:GetBoneMatrix(boneId)
+	if not curTransform then return bit.bor(ERR_FLAG_MATRIX, CALL_FLAG_SET_ANG) end
+	
+	local curTransformInvert = GetInverse(curTransform)
+	if not curTransformInvert then return bit.bor(ERR_FLAG_SINGULAR, CALL_FLAG_SET_ANG) end
+
+	local curAngManip = Matrix()
+	curAngManip:SetAngles(self:GetManipulateBoneAngles(boneId))
+	
+	local tarRotate = Matrix()
+	tarRotate:SetAngles(angw)
+
+
+	local newManipAng = (curAngManip * curTransformInvert * tarRotate):GetAngles()
+	self:ManipulateBoneAngles(boneId, newManipAng)
+
+	return SUCC_FLAG
+end
+
+function ENTITY:UPMaSetBoneScale(boneName, scale)
+	local boneId = self:LookupBone(boneName)
+	if not boneId then return bit.bor(ERR_FLAG_BONEID, CALL_FLAG_SET_SCALE) end
+	self:ManipulateBoneScale(boneId, scale)
 	return SUCC_FLAG
 end
 
@@ -288,9 +307,6 @@ local function GetBoneMatrixFromSnapshot(boneName, snapshotOrEnt)
 	if not boneId then return nil end
 	return snapshotOrEnt:GetBoneMatrix(boneId)
 end
-
-UPManip.GetBoneMatrixFromSnapshot = GetBoneMatrixFromSnapshot
-
 
 function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 	-- 一般在帧循环中调用, 所以不作验证
@@ -370,7 +386,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 				LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles()),
 				LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale()), 
 			}
-			
+
 			flags[boneName] = SUCC_FLAG
 		else
 			flags[boneName] = ERR_FLAG_LERP_METHOD
@@ -379,6 +395,113 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 	end
 
 	return resultBatch, flags
+end
+
+local MANIP_POS = 0x01
+local MANIP_ANG = 0x02
+local MANIP_SCALE = 0x04
+local MANIP_POSITION = bit.bor(MANIP_POS, MANIP_ANG)
+local MANIP_MATRIX = bit.bor(MANIP_POS, MANIP_ANG, MANIP_SCALE)
+
+UPManip.MANIP_FLAG = {
+	MANIP_POS = MANIP_POS,
+	MANIP_ANG = MANIP_ANG,
+	MANIP_SCALE = MANIP_SCALE,
+	MANIP_POSITION = MANIP_POSITION,
+	MANIP_MATRIX = MANIP_MATRIX,
+}
+
+function ENTITY:UPManipBoneBatch(snapshot, manipflag)
+	-- 可以从 UPMaLerpBoneBatch 中获取插值后的快照, 
+	local runtimeflags = {}
+	for boneName, data in ipairs(snapshot) do
+		if not data then continue end
+		local runtimeflag = SUCC_FLAG
+		local newPos, newAng, newScale = unpack(data)
+		if bit.band(manipflag, MANIP_POSITION) == MANIP_POSITION then
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePosition(boneName, newPos, newAng))
+		elseif bit.band(manipflag, MANIP_POS) == MANIP_POS then
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePos(boneName, newPos))
+		elseif bit.band(manipflag, MANIP_ANG) == MANIP_ANG then
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBoneAng(boneName, newAng))
+		end
+
+		if bit.band(manipflag, MANIP_SCALE) == MANIP_SCALE then
+			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBoneScale(boneName, newScale))
+		end
+	end
+
+	return runtimeflags
+end
+
+function ENTITY:UPMaPrintErr(flags, depth)
+	-- 不要使用嵌套表, 这里只做了简单防御
+	depth = depth or 0
+	if depth > 10 then return end
+
+	if istable(flags) then
+		for boneName, flag in pairs(flags) do
+			self:UPMaPrintErr(flag, depth + 1)
+		end
+	else
+		local errmsg = RUNTIME_FLAG_MSG[flags]
+		if errmsg then
+			print(string.format('err: %s, ent: %s, msg: %s', flags, self, errmsg))
+		end
+	end
+end
+
+
+UPManip.RUNTIME_FLAG_MSG = RUNTIME_FLAG_MSG
+UPManip.GetBoneMatrixFromSnapshot = GetBoneMatrixFromSnapshot
+UPManip.GetMatrixLocal = GetMatrixLocal
+UPManip.IsMatrixSingular = IsMatrixSingular
+UPManip.InitBoneIterator = function(boneIterator)
+	-- 主要是验证参数类型和初始化偏移矩阵
+	-- parent 和 tarParent 字段仅对局部空间插值有效
+
+	assert(istable(boneIterator), string.format('invalid boneIterator, expect table, got %s', type(boneIterator)))
+	assert(istable(boneIterator.main), string.format('invalid boneIterator.main, expect table, got %s', type(boneIterator.main)))
+
+	for _, mappingData in pairs(boneIterator.main) do
+		assert(istable(mappingData), string.format('boneIterator.main value is invalid, expect table, got %s', type(mappingData)))
+		assert(isstring(mappingData.bone), string.format('field "bone" is invalid, expect string, got %s', type(mappingData.bone)))
+		assert(isstring(mappingData.tarBone) or mappingData.tarBone == nil, string.format('field "tarBone" is invalid, expect (string or nil), got %s', type(mappingData.tarBone)))
+		assert(isstring(mappingData.parent) or mappingData.parent == nil, string.format('field "parent" is invalid, expect (string or nil), got %s', type(mappingData.parent)))
+		assert(isstring(mappingData.tarParent) or mappingData.tarParent == nil, string.format('field "tarParent" is invalid, expect (string or nil), got %s', type(mappingData.tarParent)))
+
+		if ismatrix(mappingData.offset) then
+			continue
+		end
+
+		local offsetMatrix = nil
+		local offsetAng = mappingData.ang
+		local offsetPos = mappingData.pos
+		local offsetScale = mappingData.scale
+
+		assert(isangle(offsetAng) or offsetAng == nil, string.format('field "ang" is invalid, expect (angle or nil), got %s', type(offsetAng)))
+		assert(isvector(offsetPos) or offsetPos == nil, string.format('field "pos" is invalid, expect (vector or nil), got %s', type(offsetPos)))
+		assert(isvector(offsetScale) or offsetScale == nil, string.format('field "scale" is invalid, expect (vector or nil), got %s', type(offsetScale)))
+
+		if isangle(offsetAng) then
+			offsetMatrix = offsetMatrix or Matrix()
+			offsetMatrix:SetAngles(offsetAng)
+		end
+
+		if isvector(offsetPos) then
+			offsetMatrix = offsetMatrix or Matrix()
+			offsetMatrix:SetTranslation(offsetPos)
+		end
+
+		if isvector(offsetScale) then
+			offsetMatrix = offsetMatrix or Matrix()
+			offsetMatrix:SetScale(offsetScale)
+		end
+
+		if offsetMatrix then
+			val.offset = offsetMatrix
+		end
+	end
 end
 
 concommand.Add('upmanip_test_world', function(ply)
@@ -400,7 +523,7 @@ concommand.Add('upmanip_test_world', function(ply)
 			}
 		}
 	}
-	UPManip.InitBoneIteratorOffset(boneIterator)
+	UPManip.InitBoneIterator(boneIterator)
 
 	mossman:SetupBones()
 	mossman2:SetupBones()
@@ -411,6 +534,7 @@ concommand.Add('upmanip_test_world', function(ply)
 		mossman2:SetupBones()
 		mossman:SetupBones()
 
+		local lerpSnapshot = mossman:UPMaLerpBoneBatch(0.01, nil, mossman2, boneIterator)
 		UPManip.LerpBoneWorldByMapping(0.1, mossman, mossman2, boneIterator, true)
 		
 		ang = ang + FrameTime()
@@ -490,7 +614,7 @@ concommand.Add('upmanip_test_local', function(ply)
 	}
 
 	
-	UPManip.InitBoneIteratorOffset(boneIterator)
+	UPManip.InitBoneIterator(boneIterator)
 
 	mossman:SetupBones()
 	mossman2:SetupBones()
