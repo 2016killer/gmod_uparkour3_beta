@@ -347,11 +347,12 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 		
 		if lerpMethod == CALL_FLAG_LERP_WORLD then
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
-			resultBatch[boneName] = {
-				LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation()),
-				LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles()),
-				LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale()), 
-			}
+
+			local result = Matrix()
+			result:SetTranslation(LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation()))
+			result:SetAngles(LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles()))
+			result:SetScale(LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale()))
+			resultBatch[boneName] = result
 			flags[boneName] = SUCC_FLAG
 
 		elseif lerpMethod == CALL_FLAG_LERP_LOCAL then
@@ -384,11 +385,11 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			finalMatrix = parentMatrix * tarParentMatrixInvert * finalMatrix
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
 
-			resultBatch[boneName] = {
-				LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation()),
-				LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles()),
-				LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale()), 
-			}
+			local result = Matrix()
+			result:SetTranslation(LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation()))
+			result:SetAngles(LerpAngle(t, initMatrix:GetAngles(), finalMatrix:GetAngles()))
+			result:SetScale(LerpVector(t, initMatrix:GetScale(), finalMatrix:GetScale()))
+			resultBatch[boneName] = result
 
 			flags[boneName] = SUCC_FLAG
 		else
@@ -424,18 +425,10 @@ function ENTITY:UPManipBoneBatch(snapshot, boneIterator, manipflag)
 		local data = snapshot[boneName]
 		if not data then continue end
 		local runtimeflag = SUCC_FLAG
-		local newPos, newAng, newScale = nil
-		if istable(data) then
-			newPos, newAng, newScale = unpack(data)
-		elseif ismatrix(data) then
-			newPos = data:GetTranslation()
-			newAng = data:GetAngles()
-			newScale = data:GetScale()
-		else
-			ErrorNoHaltWithStack('expect table or matrix, got', type(data))
-			continue
-		end
-
+		
+		local newPos = data:GetTranslation()
+		local newAng = data:GetAngles()
+		local newScale = data:GetScale()
 
 		if bit.band(manipflag, MANIP_POSITION) == MANIP_POSITION then
 			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePosition(boneName, newPos, newAng))
