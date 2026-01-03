@@ -93,6 +93,16 @@ function UPAction:OnValCltPredRes(...)
     return true
 end
 
+function UPAction:GetUsingEffect(ply)
+    local actName = self.Name
+    local effName = ply.upeff_cfg[actName] or 'default'
+    if effName == 'CACHE' then
+        return ply.upeff_cache[actName]
+    else
+        return EffInstances[actName][effName]
+    end
+end
+
 function UPAction:InitCVarDisabled(default)
     local cvName = sanitizeConVarName(self.Name) .. '_disabled'
 

@@ -25,32 +25,20 @@ local INTERRUPT_FLAG = UPar.ACT_EVENT_FLAG.INTERRUPT_FLAG
 local RHYTHM_FLAG = UPar.ACT_EVENT_FLAG.RHYTHM_FLAG
 local END_FLAG = UPar.ACT_EVENT_FLAG.END_FLAG
 
-local function GetPlyUsingEffect(ply, actName)
-	if actName == nil then
-		print(string.format('[UPar]: Warning: GetPlyUsingEffect: actName is nil'))
-		return nil
-	end
 
-    local effName = ply.upeff_cfg[actName] or 'default'
-    if effName == 'CACHE' then
-        return ply.upeff_cache[actName]
-    else
-        return EffInstances[actName][effName]
-    end
-end
 
 
 local function ActStart(ply, action, checkResult)
 	action:Start(ply, checkResult)
 
-	local effect = GetPlyUsingEffect(ply, action.Name)
+	local effect = action:GetUsingEffect(ply)
 	if effect then effect:Start(ply, checkResult) end
 end
 
 local function ActClear(ply, playing, playingData, mv, cmd, interruptSource)
 	playing:Clear(ply, playingData, mv, cmd, interruptSource)
 
-	local effect = GetPlyUsingEffect(ply, playing.Name)
+	local effect = action:GetUsingEffect(ply)
 	if effect then effect:Clear(ply, playingData, interruptSource) end
 end
 
@@ -65,15 +53,13 @@ local function ActEffRhythmChange(ply, action, customData, silent)
 		net.Send(ply)
 	end
 
-	local effect = GetPlyUsingEffect(ply, actName)
+	local effect = action:GetUsingEffect(ply)
 	if effect then effect:Rhythm(ply, customData) end
 
 	if not silent then
 		SeqHookRunAllSafe('UParActEvent', ply, {rhythmEvent})
 	end
 end
-
-UPar.GetPlyUsingEffect = GetPlyUsingEffect
 
 UPar.ActStart = ActStart
 UPar.ActClear = ActClear
@@ -144,7 +130,13 @@ UPar.GetEffKV = function(actName, effName, key)
 end
 
 UPar.CallPlyUsingEff = function(actName, methodName, ply, ...)
-    local effect = GetPlyUsingEffect(ply, actName)
+	local action = ActInstances[actName]
+    if not action then
+		print(string.format('not found act named "%s"', actName))
+		return
+    end
+
+    local effect = action:GetUsingEffect(ply)
     if not effect then
 		print(string.format('not found eff "USING" in act "%s" for ply "%s"', actName, ply))
 		return
@@ -160,7 +152,13 @@ UPar.CallPlyUsingEff = function(actName, methodName, ply, ...)
 end
 
 UPar.GetPlyUsingEffKV = function(actName, key, ply)
-    local effect = GetPlyUsingEffect(ply, actName)
+	local action = ActInstances[actName]
+    if not action then
+		print(string.format('not found act named "%s"', actName))
+		return
+    end
+	
+    local effect = action:GetUsingEffect(ply)
     if not effect then
 		print(string.format('not found eff "USING" in act "%s" for ply "%s"', actName, ply))
 		return
