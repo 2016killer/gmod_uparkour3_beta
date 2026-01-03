@@ -13,7 +13,7 @@
 	完成后再手动编码。为什么不写自动排序? 因为有些骨架虽然骨骼名相同, 但是节点关系混乱,
 	比如 cw2 的 c_hand。
 
-	这里的插值分为两种 世界空间插值（CALL_FLAG_LERP_WORLD） 和 局部空间插值（CALL_FLAG_LERP_LOCAL）
+	这里的插值分为两种 世界空间插值(CALL_FLAG_LERP_WORLD) 和 局部空间插值(CALL_FLAG_LERP_LOCAL)
 	如果从本质来看, 世界空间的插值可以看做一种特殊的局部空间插值, 只是将所有骨骼的父级都看作是 World,
 
 	同时这里的 API 都是用骨骼名来指向操作的骨骼, 而不是 boneId, 这对编写、调试都有好处, 缺点是不能像
@@ -317,16 +317,21 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 	local resultBatch = {}
 	local flags = {}
 
+	-- 还是搞点拦截吧，外部不好重算
+	local UnpackMappingData = boneIterator.UnpackMappingData
+	local LerpRangeHandler = boneIterator.LerpRangeHandler
+
 	for _, mappingData in ipairs(boneIterator) do
+		-- 添加一些动态特性吧
+		mappingData = UnpackMappingData
+			and UnpackMappingData(t, self, tarSnapshotOrEnt, mappingData) 
+			or mappingData
+
 		local boneName = mappingData.bone
 		local tarBoneName = mappingData.tarBone or boneName
 		local offsetMatrix = mappingData.offset
 		local lerpMethod = mappingData.lerpMethod or CALL_FLAG_LERP_LOCAL
-		
-		-- 害没办法, 不在这里拦截的话, 外部调用会算的头昏眼花
-		local GetInitBoneMatrix = mappingData.GetInitBoneMatrix or GetBoneMatrixFromSnapshot
-		local GetFinalBoneMatrix = mappingData.GetFinalBoneMatrix or GetBoneMatrixFromSnapshot
-		
+
 		-- 根节点只能使用世界空间插值
 		local boneId = self:LookupBone(boneName)
 		if not boneId then 
@@ -337,13 +342,13 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 		lerpMethod = parentId == -1 and CALL_FLAG_LERP_WORLD or lerpMethod
 
 
-		local initMatrix = GetInitBoneMatrix(boneName, snapshot or self)
+		local initMatrix = GetBoneMatrixFromSnapshot(boneName, snapshot or self)
 		if not initMatrix then 
 			flags[boneName] = bit.bor(ERR_FLAG_MATRIX, lerpMethod)
 			continue
 		end
 
-		local finalMatrix = GetFinalBoneMatrix(tarBoneName, tarSnapshotOrEnt)
+		local finalMatrix = GetBoneMatrixFromSnapshot(tarBoneName, tarSnapshotOrEnt)
 		if not finalMatrix then 
 			flags[boneName] = bit.bor(ERR_FLAG_TAR_BONEID, lerpMethod)
 			continue
@@ -351,6 +356,9 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 
 		if lerpMethod == CALL_FLAG_LERP_WORLD then	
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
+			if LerpRangeHandler then
+				initMatrix, finalMatrix = LerpRangeHandler(t, self, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+			end
 
 			local result = Matrix()
 			result:SetTranslation(LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation()))
@@ -363,13 +371,13 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			local parentName = mappingData.parent and mappingData.parent or self:GetBoneName(parentId)
 			local tarParentName = mappingData.tarParent or parentName
 
-			local parentMatrix = GetInitBoneMatrix(parentName, snapshot or self)
+			local parentMatrix = GetBoneMatrixFromSnapshot(parentName, self)
 			if not parentMatrix then 
 				flags[boneName] = bit.bor(ERR_FLAG_PARENT_MATRIX, lerpMethod)
 				continue 
 			end
 
-			local tarParentMatrix = GetFinalBoneMatrix(tarParentName, tarSnapshotOrEnt)
+			local tarParentMatrix = GetBoneMatrixFromSnapshot(tarParentName, tarSnapshotOrEnt)
 			if not tarParentMatrix then 
 				flags[boneName] = bit.bor(ERR_FLAG_TAR_PARENT_MATRIX, lerpMethod)
 				continue 
@@ -388,6 +396,10 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 
 			finalMatrix = parentMatrix * tarParentMatrixInvert * finalMatrix
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
+
+			if LerpRangeHandler then
+				initMatrix, finalMatrix = LerpRangeHandler(t, self, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+			end
 
 			local result = Matrix()
 			result:SetTranslation(LerpVector(t, initMatrix:GetTranslation(), finalMatrix:GetTranslation()))
@@ -490,6 +502,8 @@ UPManip.InitBoneIterator = function(boneIterator)
 	-- parent 和 tarParent 字段仅对局部空间插值有效
 
 	assert(istable(boneIterator), string.format('invalid boneIterator, expect table, got %s', type(boneIterator)))
+	assert(isfunction(boneIterator.LerpRangeHandler) or boneIterator.LerpRangeHandler == nil, string.format('boneIterator.LerpRangeHandler is invalid, expect (function or nil), got %s', type(boneIterator.LerpRangeHandler)))
+	assert(isfunction(boneIterator.UnpackMappingData) or boneIterator.UnpackMappingData == nil, string.format('boneIterator.UnpackMappingData is invalid, expect (function or nil), got %s', type(boneIterator.UnpackMappingData)))
 
 	for _, mappingData in pairs(boneIterator) do
 		assert(istable(mappingData), string.format('boneIterator value is invalid, expect table, got %s', type(mappingData)))
@@ -497,6 +511,7 @@ UPManip.InitBoneIterator = function(boneIterator)
 		assert(isstring(mappingData.tarBone) or mappingData.tarBone == nil, string.format('field "tarBone" is invalid, expect (string or nil), got %s', type(mappingData.tarBone)))
 		assert(isstring(mappingData.parent) or mappingData.parent == nil, string.format('field "parent" is invalid, expect (string or nil), got %s', type(mappingData.parent)))
 		assert(isstring(mappingData.tarParent) or mappingData.tarParent == nil, string.format('field "tarParent" is invalid, expect (string or nil), got %s', type(mappingData.tarParent)))
+		assert(isnumber(mappingData.lerpMethod) or mappingData.lerpMethod == nil, string.format('field "lerpMethod" is invalid, expect (number or nil), got %s', type(mappingData.lerpMethod)))
 
 		if ismatrix(mappingData.offset) then
 			continue
