@@ -38,7 +38,7 @@ end
 local function ActClear(ply, playing, playingData, mv, cmd, interruptSource)
 	playing:Clear(ply, playingData, mv, cmd, interruptSource)
 
-	local effect = action:GetUsingEffect(ply)
+	local effect = playing:GetUsingEffect(ply)
 	if effect then effect:Clear(ply, playingData, interruptSource) end
 end
 
