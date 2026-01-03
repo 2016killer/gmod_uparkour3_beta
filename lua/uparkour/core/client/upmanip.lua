@@ -76,8 +76,8 @@ local RUNTIME_FLAG_MSG = {
 	[ERR_FLAG_TAR_PARENT] = 'can not find tarBone parent',
 	[ERR_FLAG_TAR_PARENT_MATRIX] = 'can not find tarBone parent Matrix',
 	[ERR_FLAG_TAR_PARENT_SINGULAR] = 'target parent matrix is singular',
-	[CALL_FLAG_LERP_LOCAL] = 'call: lerp in world space',
-	[CALL_FLAG_LERP_WORLD] = 'call: lerp in local space',
+	[CALL_FLAG_LERP_LOCAL] = 'call: lerp in local space',
+	[CALL_FLAG_LERP_WORLD] = 'call: lerp in world space',
 	[CALL_FLAG_SET_POSITION] = 'call: set position',
 	[CALL_FLAG_SNAPSHOT] = 'call: snapshot',
 	[ERR_FLAG_LERP_METHOD] = 'invalid lerp method',
@@ -460,7 +460,8 @@ function ENTITY:UPMaPrintErr(runtimeflag, boneName, depth)
 			end
 		end
 		if #totalmsg == 0 then return end
-		print(string.format('============%s===========', self))
+		print('============UPManip Err===========')
+		print('entity:', self)
 		print('boneName:', boneName)
 		print('errcode:', runtimeflag)
 		print(table.concat(totalmsg, ', '))
