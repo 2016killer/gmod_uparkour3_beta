@@ -79,7 +79,7 @@ local RUNTIME_FLAG_MSG = {
 	[CALL_FLAG_SET_POSITION] = 'call: set position',
 	[CALL_FLAG_SNAPSHOT] = 'call: snapshot',
 	[ERR_FLAG_LERP_METHOD] = 'invalid lerp method',
-	[CALL_FLAG_SET_POS] = 'call: set position',
+	[CALL_FLAG_SET_POS] = 'call: set pos',
 	[CALL_FLAG_SET_ANG] = 'call: set angle',
 	[CALL_FLAG_SET_SCALE] = 'call: set scale',
 }
