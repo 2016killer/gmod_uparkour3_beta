@@ -424,7 +424,19 @@ function ENTITY:UPManipBoneBatch(snapshot, boneIterator, manipflag)
 		local data = snapshot[boneName]
 		if not data then continue end
 		local runtimeflag = SUCC_FLAG
-		local newPos, newAng, newScale = unpack(data)
+		local newPos, newAng, newScale = nil
+		if istable(data) then
+			newPos, newAng, newScale = unpack(data)
+		elseif ismatrix(data) then
+			newPos = data:GetTranslation()
+			newAng = data:GetAngles()
+			newScale = data:GetScale()
+		else
+			ErrorNoHaltWithStack('expect table or matrix, got', type(data))
+			continue
+		end
+
+
 		if bit.band(manipflag, MANIP_POSITION) == MANIP_POSITION then
 			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBonePosition(boneName, newPos, newAng))
 		elseif bit.band(manipflag, MANIP_POS) == MANIP_POS then
