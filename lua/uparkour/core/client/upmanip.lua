@@ -9,7 +9,7 @@
 	由于这些函数常常在帧循环中, 加上计算略显密集 (串行), 所以很多的错误都是无声的, 这极大
 	地增加了调试难度, 有点像GPU编程, 操, 所以我并不推荐使用这些。
 
-	插值需要指定骨骼映射和其排序, GetEntBonesFamilyLevel(ent, useLRU2) 可以辅助排序,
+	插值需要指定骨骼映射和其排序, ent:UPMaGetEntBonesFamilyLevel() 可以辅助排序,
 	完成后再手动编码, 为什么我不写自动排序? 因为有些骨架虽然骨骼名相同, 但是他们家装(节点)关系混乱,
 	比如 cw2 的 c_hand。
 
@@ -136,19 +136,19 @@ local function __internal_MarkBoneFamilyLevel(boneId, currentLevel, family, fami
 end
 
 function ENTITY:UPMaGetEntBonesFamilyLevel()
-	if self:GetModel() then
+	if not self:GetModel() then
 		print('[UPMaGetEntBonesFamilyLevel]: ent no model')
 		return
 	end
 
-	ent:SetupBones()
+	self:SetupBones()
 
-    local boneCount = ent:GetBoneCount()
+    local boneCount = self:GetBoneCount()
     local family = {} 
     local familyLevel = {}
 
     for boneIdx = 0, boneCount - 1 do
-        local parentIdx = ent:GetBoneParent(boneIdx)
+        local parentIdx = self:GetBoneParent(boneIdx)
         
         if not family[parentIdx] then
             family[parentIdx] = {}
@@ -157,7 +157,7 @@ function ENTITY:UPMaGetEntBonesFamilyLevel()
     end
 
 	if not family[-1] then
-		print(string.format('[UPManip.GetEntBonesFamilyLevel]: ent "%s" no root bone', ent))
+		print(string.format('[UPMaGetEntBonesFamilyLevel]: ent "%s" no root bone', self))
 		return
 	end
 
@@ -272,11 +272,10 @@ end
 
 function ENTITY:UPMaSnapshot(boneIterator)
 	-- 默认已经初始化验证过了, 这里不再重复验证
-	local main = boneIterator.main
 	local snapshot = {}
 	local flags = {}
 
-	for _, mappingData in pairs(main) do
+	for _, mappingData in ipairs(boneIterator) do
 		local boneName = mappingData.bone
 
 		local boneId = self:LookupBone(boneName)
@@ -313,20 +312,22 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
 
-	local main = boneIterator.main
 	local resultBatch = {}
 	local flags = {}
 
-	for _, boneName in ipairs(keySort) do
-		local mappingData = main[boneName]
-
+	for _, mappingData in ipairs(boneIterator) do
 		local boneName = mappingData.bone
 		local tarBoneName = mappingData.tarBone or boneName
 		local offsetMatrix = mappingData.offset
 		local lerpMethod = mappingData.lerpMethod or CALL_FLAG_LERP_LOCAL
-		local parentId = self:GetBoneParent(boneId)
 
 		-- 根节点只能使用世界空间插值
+		local boneId = self:LookupBone(boneName)
+		if not boneId then 
+			flags[boneName] = bit.bor(ERR_FLAG_BONEID, lerpMethod)
+			continue 
+		end
+		local parentId = self:GetBoneParent(boneId)
 		lerpMethod = parentId == -1 and CALL_FLAG_LERP_WORLD or lerpMethod
 
 
@@ -336,7 +337,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			continue
 		end
 
-		local finalMatrix = GetBoneMatrixFromSnapshot(tarBoneName, tarEntOrSnapshot)
+		local finalMatrix = GetBoneMatrixFromSnapshot(tarBoneName, tarSnapshotOrEnt)
 		if not finalMatrix then 
 			flags[boneName] = bit.bor(ERR_FLAG_TAR_BONEID, lerpMethod)
 			continue
@@ -352,7 +353,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			flags[boneName] = SUCC_FLAG
 
 		elseif lerpMethod == CALL_FLAG_LERP_LOCAL then
-			local parentName = mappingData.parent
+			local parentName = mappingData.parent and mappingData.parent or self:GetBoneName(parentId)
 			local tarParentName = mappingData.tarParent or parentName
 
 			local parentMatrix = GetBoneMatrixFromSnapshot(parentName, snapshot or self)
@@ -361,13 +362,13 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 				continue 
 			end
 
-			local tarParentMatrix = GetBoneMatrixFromSnapshot(tarParentName, tarEntOrSnapshot)
+			local tarParentMatrix = GetBoneMatrixFromSnapshot(tarParentName, tarSnapshotOrEnt)
 			if not tarParentMatrix then 
 				flags[boneName] = bit.bor(ERR_FLAG_TAR_PARENT_MATRIX, lerpMethod)
 				continue 
 			end
 
-			if not IsMatrixSingular(parentMatrix) then 
+			if IsMatrixSingular(parentMatrix) then 
 				flags[boneName] = bit.bor(ERR_FLAG_PARENT_SINGULAR, lerpMethod)
 				continue 
 			end
@@ -411,10 +412,14 @@ UPManip.MANIP_FLAG = {
 	MANIP_MATRIX = MANIP_MATRIX,
 }
 
-function ENTITY:UPManipBoneBatch(snapshot, manipflag)
+function ENTITY:UPManipBoneBatch(snapshot, boneIterator, manipflag)
 	-- 可以从 UPMaLerpBoneBatch 中获取插值后的快照, 
+	-- 必须使用迭代器来遍历, 因为顺序有要求
+
 	local runtimeflags = {}
-	for boneName, data in ipairs(snapshot) do
+	for _, mappingData in ipairs(boneIterator) do
+		local boneName = mappingData.bone
+		local data = snapshot[boneName]
 		if not data then continue end
 		local runtimeflag = SUCC_FLAG
 		local newPos, newAng, newScale = unpack(data)
@@ -429,25 +434,31 @@ function ENTITY:UPManipBoneBatch(snapshot, manipflag)
 		if bit.band(manipflag, MANIP_SCALE) == MANIP_SCALE then
 			runtimeflag = bit.bor(runtimeflag, self:UPMaSetBoneScale(boneName, newScale))
 		end
+
+		runtimeflags[boneName] = runtimeflag
 	end
 
 	return runtimeflags
 end
 
-function ENTITY:UPMaPrintErr(flags, depth)
+function ENTITY:UPMaPrintErr(runtimeflag, boneName, depth)
 	-- 不要使用嵌套表, 这里只做了简单防御
 	depth = depth or 0
 	if depth > 10 then return end
 
-	if istable(flags) then
-		for boneName, flag in pairs(flags) do
-			self:UPMaPrintErr(flag, depth + 1)
+	if istable(runtimeflag) then
+		for boneName, flag in pairs(runtimeflag) do
+			self:UPMaPrintErr(flag, boneName, depth + 1)
+		end
+	elseif isnumber(runtimeflag) then
+		for flag, msg in pairs(RUNTIME_FLAG_MSG) do
+			if bit.band(runtimeflag, flag) == flag then
+				print(string.format('err: %s, ent: %s, bone: %s, msg: %s', flag, self, boneName, msg))
+			end
 		end
 	else
-		local errmsg = RUNTIME_FLAG_MSG[flags]
-		if errmsg then
-			print(string.format('err: %s, ent: %s, msg: %s', flags, self, errmsg))
-		end
+		print('Warn: unknown flags type, expect number or table, got', type(runtimeflag))
+		return
 	end
 end
 
@@ -461,10 +472,9 @@ UPManip.InitBoneIterator = function(boneIterator)
 	-- parent 和 tarParent 字段仅对局部空间插值有效
 
 	assert(istable(boneIterator), string.format('invalid boneIterator, expect table, got %s', type(boneIterator)))
-	assert(istable(boneIterator.main), string.format('invalid boneIterator.main, expect table, got %s', type(boneIterator.main)))
 
-	for _, mappingData in pairs(boneIterator.main) do
-		assert(istable(mappingData), string.format('boneIterator.main value is invalid, expect table, got %s', type(mappingData)))
+	for _, mappingData in pairs(boneIterator) do
+		assert(istable(mappingData), string.format('boneIterator value is invalid, expect table, got %s', type(mappingData)))
 		assert(isstring(mappingData.bone), string.format('field "bone" is invalid, expect string, got %s', type(mappingData.bone)))
 		assert(isstring(mappingData.tarBone) or mappingData.tarBone == nil, string.format('field "tarBone" is invalid, expect (string or nil), got %s', type(mappingData.tarBone)))
 		assert(isstring(mappingData.parent) or mappingData.parent == nil, string.format('field "parent" is invalid, expect (string or nil), got %s', type(mappingData.parent)))
@@ -499,7 +509,7 @@ UPManip.InitBoneIterator = function(boneIterator)
 		end
 
 		if offsetMatrix then
-			val.offset = offsetMatrix
+			mappingData.offset = offsetMatrix
 		end
 	end
 end
@@ -515,12 +525,17 @@ concommand.Add('upmanip_test_world', function(ply)
 	mossman2:SetPos(pos)
 
 	local boneIterator = {
-		main = {
-			{
-				bone = 'ValveBiped.Bip01_Head1',
-				ang = Angle(90, 0, 0),
-				scale = Vector(2, 2, 2)
-			}
+		{
+			bone = 'ValveBiped.Bip01_Pelvis',
+			ang = Angle(0, 0, 90),
+			lerpMethod = CALL_FLAG_LERP_WORLD,
+		},
+
+		{
+			bone = 'ValveBiped.Bip01_Head1',
+			ang = Angle(90, 10, 0),
+			scale = Vector(2, 2, 2),
+			lerpMethod = CALL_FLAG_LERP_WORLD,
 		}
 	}
 	UPManip.InitBoneIterator(boneIterator)
@@ -530,18 +545,26 @@ concommand.Add('upmanip_test_world', function(ply)
 
 	local ang = 0
 	timer.Create('upmanip_test_world', 0, 0, function()
+		if not IsValid(mossman) or not IsValid(mossman2) then 
+			timer.Remove('upmanip_test_world')
+			return
+		end
+
 		mossman2:SetPos(pos + Vector(math.cos(ang) * 100, math.sin(ang) * 100, 0))
 		mossman2:SetupBones()
 		mossman:SetupBones()
 
-		local lerpSnapshot = mossman:UPMaLerpBoneBatch(0.01, nil, mossman2, boneIterator)
-		UPManip.LerpBoneWorldByMapping(0.1, mossman, mossman2, boneIterator, true)
+		local lerpSnapshot, runtimeflags = mossman:UPMaLerpBoneBatch(
+			0.1, nil, mossman2, boneIterator)
+		mossman:UPMaPrintErr(runtimeflags)
+		local runtimeflag = mossman:UPManipBoneBatch(lerpSnapshot, 
+			boneIterator, MANIP_MATRIX)
+		mossman:UPMaPrintErr(runtimeflag)
 		
 		ang = ang + FrameTime()
 	end)
 
 	timer.Simple(5, function()
-		timer.Remove('upmanip_test_world')
 		if IsValid(mossman) then mossman:Remove() end
 		if IsValid(mossman2) then mossman2:Remove() end
 	end)
@@ -563,57 +586,27 @@ concommand.Add('upmanip_test_local', function(ply)
 	mossman2:SetPlaybackRate(1)
 	mossman2:ResetSequence(mossman2:LookupSequence('crouch_reload_pistol'))
 
-
-	local boneIterator = {
-		main = {
-			{
-				bone = 'ValveBiped.Bip01_Spine',
-				tarBone = 'ValveBiped.Bip01_Spine',
-
-				parent = 'ValveBiped.Bip01_Spine',
-				tarParent = 'ValveBiped.Bip01_Spine',
-
-				angOffset = Angle(90, 0, 0),
-				posOffset = Vector(0, 0, 10),
-				scale = Vector(0.5, 0.5, 0.5),
-			}
-
-
-			['ValveBiped.Bip01_Spine'] = true,
-			['ValveBiped.Bip01_Spine1'] = true,
-			['ValveBiped.Bip01_Spine2'] = true,
-			['ValveBiped.Bip01_L_Clavicle'] = true,
-			['ValveBiped.Bip01_L_UpperArm'] = true,
-			['ValveBiped.Bip01_L_Forearm'] = true,
-			['ValveBiped.Bip01_L_Hand'] = true,
-			['ValveBiped.Bip01_R_Clavicle'] = true,
-			['ValveBiped.Bip01_R_UpperArm'] = true,
-			['ValveBiped.Bip01_R_Forearm'] = true,
-			['ValveBiped.Bip01_R_Hand'] = true,
-			['ValveBiped.Bip01_Neck1'] = true,
-			['ValveBiped.Bip01_Head1'] = {
-				ang = Angle(90, 0, 0),
-				scale = Vector(2, 2, 2)
-			},
-		},
-		keySort = {
-			'ValveBiped.Bip01_Spine',
-			'ValveBiped.Bip01_Spine1',
-			'ValveBiped.Bip01_Spine2',
-			'ValveBiped.Bip01_L_Clavicle',
-			'ValveBiped.Bip01_L_UpperArm',
-			'ValveBiped.Bip01_L_Forearm',
-			'ValveBiped.Bip01_L_Hand',
-			'ValveBiped.Bip01_R_Clavicle',
-			'ValveBiped.Bip01_R_UpperArm',
-			'ValveBiped.Bip01_R_Forearm',
-			'ValveBiped.Bip01_R_Hand',
-			'ValveBiped.Bip01_Neck1',
-			'ValveBiped.Bip01_Head1',
-		},
+	local bones = {
+		'ValveBiped.Bip01_Spine',
+		'ValveBiped.Bip01_Spine1',
+		'ValveBiped.Bip01_Spine2',
+		'ValveBiped.Bip01_L_Clavicle',
+		'ValveBiped.Bip01_L_UpperArm',
+		'ValveBiped.Bip01_L_Forearm',
+		'ValveBiped.Bip01_L_Hand',
+		'ValveBiped.Bip01_R_Clavicle',
+		'ValveBiped.Bip01_R_UpperArm',
+		'ValveBiped.Bip01_R_Forearm',
+		'ValveBiped.Bip01_R_Hand',
+		'ValveBiped.Bip01_Neck1',
+		'ValveBiped.Bip01_Head1'
 	}
 
-	
+	local boneIterator = {}
+	for i, boneName in ipairs(bones) do
+		boneIterator[i] = {bone = boneName}
+	end
+
 	UPManip.InitBoneIterator(boneIterator)
 
 	mossman:SetupBones()
@@ -621,17 +614,27 @@ concommand.Add('upmanip_test_local', function(ply)
 
 	local ang = 0
 	timer.Create('upmanip_test_local', 0, 0, function()
+		if not IsValid(mossman) or not IsValid(mossman2) then 
+			timer.Remove('upmanip_test_local')
+			return
+		end
+
 		mossman2:SetCycle((mossman2:GetCycle() + FrameTime()) % 1)
 		mossman2:SetupBones()
 
 		mossman:SetupBones()
-		UPManip.LerpBoneLocalByMapping(1, mossman, mossman2, boneIterator, true)
+
+		local lerpSnapshot, runtimeflags = mossman:UPMaLerpBoneBatch(
+			0.1, nil, mossman2, boneIterator)
+		mossman:UPMaPrintErr(runtimeflags)
+		local runtimeflag = mossman:UPManipBoneBatch(lerpSnapshot, 
+			boneIterator, MANIP_MATRIX)
+		mossman:UPMaPrintErr(runtimeflag)
 		
 		ang = ang + FrameTime()
 	end)
 		
 	timer.Simple(5, function()
-		timer.Remove('upmanip_test_local')
 		if IsValid(mossman) then mossman:Remove() end
 		if IsValid(mossman2) then mossman2:Remove() end
 	end)
