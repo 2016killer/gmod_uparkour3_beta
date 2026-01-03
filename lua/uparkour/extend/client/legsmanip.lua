@@ -27,11 +27,15 @@ ManipLegs.BonesToRemove = {
 	['ValveBiped.Bip01_Head1'] = true,
 	['ValveBiped.Bip01_L_Hand'] = true,
 	['ValveBiped.Bip01_L_Forearm'] = true,
-	['ValveBiped.Bip01_L_Upperarm'] = true,
+	['ValveBiped.Bip01_L_Upperarm'] = {
+		Vector(0, 0, -20)
+	},
 	['ValveBiped.Bip01_L_Clavicle'] = true,
 	['ValveBiped.Bip01_R_Hand'] = true,
 	['ValveBiped.Bip01_R_Forearm'] = true,
-	['ValveBiped.Bip01_R_Upperarm'] = true,
+	['ValveBiped.Bip01_R_Upperarm'] = {
+		Vector(0, 0, 20)
+	},
 	['ValveBiped.Bip01_R_Clavicle'] = true,
 	['ValveBiped.Bip01_Spine4'] = true,
 }
@@ -58,6 +62,42 @@ for i, v in ipairs(temp) do
 end
 UPManip.InitBoneIterator(ManipLegs.BoneIterator)
 temp = nil
+
+ManipLegs.BoneIterator.LerpRangeHandler = function(t, ent, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+	-- 这是专用的, 其他场景不适用
+	
+	local boneName = mappingData.bone
+	if boneName ~= 'ValveBiped.Bip01_Pelvis' 
+	or tarSnapshotOrEnt ~= LocalPlayer() then
+		return initMatrix, finalMatrix
+	end
+
+	local boneId = LocalPlayer():LookupBone(boneName)
+	if not boneId then
+		return initMatrix, finalMatrix
+	end
+
+	local PelvisMatrix = LocalPlayer():GetBoneMatrix(boneId)
+	if not PelvisMatrix then
+		return initMatrix, finalMatrix
+	end
+
+	local tempAng = LocalPlayer():GetAngles()
+	tempAng.p = 0
+	tempAng.r = 0
+	local posl = WorldToLocal(
+		PelvisMatrix:GetTranslation(), 
+		PelvisMatrix:GetAngles(), 
+		LocalPlayer():GetPos(), 
+		tempAng
+	)
+
+	local newFinalPos = ent:LocalToWorld(posl)
+	finalMatrix:SetTranslation(ent:LocalToWorld(posl))
+
+	return initMatrix, finalMatrix
+end
+
 
 ManipLegs.FRAME_LOOP_HOOK = {
 	{
@@ -88,8 +128,7 @@ ManipLegs.MagicOffsetZ0 = 8
 ManipLegs.MagicOffsetZ1 = -28
 ManipLegs.LerpT = 0
 ManipLegs.FadeInSpeed = 10
-ManipLegs.FadeOutSpeed = 3
-ManipLegs.PelvisFadeInRate = 5
+ManipLegs.FadeOutSpeed = 5
 ManipLegs.Speed = 0
 
 function ManipLegs:UpdatePosition()
@@ -147,15 +186,15 @@ function ManipLegs:UpdateAnimation(dt)
 		self.LegEnt:UPMaPrintErr(runtimeflags)
 		self.Snapshot = snapshot
 
-		// for _, v in pairs(self.Snapshot) do
-		// 	debugoverlay.Box(
-		// 		v:GetTranslation(), 
-		// 		Vector(-1, -1, -1), 
-		// 		Vector(1, 1, 1), 
-		// 		10, 
-		// 		Color(255, 0, 0)
-		// 	)
-		// end
+		for _, v in pairs(self.Snapshot) do
+			debugoverlay.Box(
+				v:GetTranslation(), 
+				Vector(-1, -1, -1), 
+				Vector(1, 1, 1), 
+				10, 
+				Color(255, 0, 0)
+			)
+		end
 	end
 
 	if isentity(self.Target) and IsValid(self.Target) then
@@ -185,29 +224,6 @@ function ManipLegs:UpdateAnimation(dt)
 			self.BoneIterator)
 		self.LegEnt:UPMaPrintErr(runtimeflags)
 
-
-		local Bip01_Pelvis_snapshot = self.Snapshot and self.Snapshot['ValveBiped.Bip01_Pelvis']
-		local Bip01_Pelvis_lerpSnapshot = lerpSnapshot['ValveBiped.Bip01_Pelvis']
-		local Bip01_Pelvis_boneId = LocalPlayer():LookupBone('ValveBiped.Bip01_Pelvis')
-		if Bip01_Pelvis_snapshot and Bip01_Pelvis_lerpSnapshot and Bip01_Pelvis_boneId then
-			local Bip01_Pelvis_ply = LocalPlayer():GetBoneMatrix(Bip01_Pelvis_boneId)
-			if Bip01_Pelvis_ply then
-				local Bip01_Pelvis_posl = WorldToLocal(
-					Bip01_Pelvis_ply:GetTranslation(), 
-					Bip01_Pelvis_ply:GetAngles(), 
-					LocalPlayer():GetPos(), 
-					self.NewAngle
-				)
-				Bip01_Pelvis_lerpSnapshot:SetTranslation(
-					LerpVector(
-						math.Clamp(self.LerpT * self.PelvisFadeInRate, 0, 1),
-						Bip01_Pelvis_snapshot:GetTranslation(), 
-						self.LegEnt:LocalToWorld(Bip01_Pelvis_posl)
-					)	
-				) 
-			end
-		end
-		
 		local runtimeflag = self.LegEnt:UPManipBoneBatch(lerpSnapshot, 
 			self.BoneIterator, UPManip.MANIP_FLAG.MANIP_POSITION)
 		self.LegEnt:UPMaPrintErr(runtimeflag)
@@ -273,14 +289,13 @@ function ManipLegs:Init()
 		return LocalPlayer():GetPlayerColor()
 	end
 
-	for i = 0, LegEnt:GetBoneCount() do
-		LegEnt:ManipulateBoneAngles(i, zeroang)
-		LegEnt:ManipulateBonePosition(i, zerovec)
-		LegEnt:ManipulateBoneScale(i, diagonalvec)
-	end
-
 	if created then
-		print('created')
+		for i = 0, LegEnt:GetBoneCount() do
+			LegEnt:ManipulateBoneAngles(i, zeroang)
+			LegEnt:ManipulateBonePosition(i, zerovec)
+			LegEnt:ManipulateBoneScale(i, diagonalvec)
+		end
+
 		for boneName, v in pairs(self.BonesToRemove) do
 			local boneId = LegEnt:LookupBone(boneName)
 			if not boneId then 
@@ -310,7 +325,7 @@ function ManipLegs:Wake()
 		return false
 	end
 
-	self.LegEnt:SetParent(ply)
+	self.LegEnt:SetParent(LocalPlayer())
 	self.LegEnt:SetNoDraw(false)
 	self.IsWake = true
 
@@ -378,25 +393,6 @@ end
 g_ManipLegs:Init()
 g_ManipLegs:Register()
 
-concommand.Add('upext_legsmanip_debug', function()
-	print('[UPExt]: LegsManip: Debug')
-
-	if IsValid(g_ManipLegs.LegEnt) then
-		g_ManipLegs.LegEnt:SetupBones()
-		for i = 0, g_ManipLegs.LegEnt:GetBoneCount() - 1 do
-			local boneName = g_ManipLegs.LegEnt:GetBoneName(i)
-			local manipPos = g_ManipLegs.LegEnt:GetManipulateBonePosition(i)
-			local manipAng = g_ManipLegs.LegEnt:GetManipulateBoneAngles(i)
-			local manipScale = g_ManipLegs.LegEnt:GetManipulateBoneScale(i)
-			print(string.format('============%s===========', boneName))
-			print(string.format('ManipPos: %s', manipPos))
-			print(string.format('ManipAng: %s', manipAng))
-			print(string.format('ManipScale: %s', manipScale))
-			print(string.format('============%s===========\n', boneName))
-		end
-	end
-
-end)
 -- ==============================================================
 -- 菜单
 -- ==============================================================

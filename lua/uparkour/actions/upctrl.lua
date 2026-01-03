@@ -59,6 +59,13 @@ if SERVER then
 	end, 'notify')
 end
 
+controller.ACT_FLAGS = {
+	['upvaultdl'] = VAULTDL_FLAG,
+	['uplowclimb'] = LOW_CLIMB_FLAG,
+	['upvaultdh'] = VAULTDH_FLAG,
+	['uphighclimb'] = HIGH_CLIMB_FLAG
+}
+
 local VAULTDL_FLAG = 0x01
 local LOW_CLIMB_FLAG = 0x02
 local VAULTDH_FLAG = 0x04
