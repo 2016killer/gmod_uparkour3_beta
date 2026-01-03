@@ -103,12 +103,11 @@ ManipLegs.FRAME_LOOP_HOOK = {
 	{
 		EVENT_NAME = 'Think',
 		IDENTITY = 'UPExtLegsManip',
-		CALL = function()
+		CALL = function(self, ...)
 			if not IsValid(LocalPlayer()) then
 				return
 			end
 
-			local self = ManipLegs
 			self:UpdatePosition()
 			self:UpdateAnimation(FrameTime())
 		end
@@ -117,7 +116,7 @@ ManipLegs.FRAME_LOOP_HOOK = {
 	{
 		EVENT_NAME = 'ShouldDisableLegs',
 		IDENTITY = 'UPExtLegsManip',
-		CALL = function()
+		CALL = function(self, ...)
 			return true
 		end
 	}
@@ -183,18 +182,18 @@ function ManipLegs:UpdateAnimation(dt)
 
 	if not self.Snapshot then
 		local snapshot, runtimeflags = self.LegEnt:UPMaSnapshot(self.BoneIterator)
-		self.LegEnt:UPMaPrintErr(runtimeflags)
+		// self.LegEnt:UPMaPrintErr(runtimeflags)
 		self.Snapshot = snapshot
 
-		for _, v in pairs(self.Snapshot) do
-			debugoverlay.Box(
-				v:GetTranslation(), 
-				Vector(-1, -1, -1), 
-				Vector(1, 1, 1), 
-				10, 
-				Color(255, 0, 0)
-			)
-		end
+		// for _, v in pairs(self.Snapshot) do
+		// 	debugoverlay.Box(
+		// 		v:GetTranslation(), 
+		// 		Vector(-1, -1, -1), 
+		// 		Vector(1, 1, 1), 
+		// 		10, 
+		// 		Color(255, 0, 0)
+		// 	)
+		// end
 	end
 
 	if isentity(self.Target) and IsValid(self.Target) then
@@ -207,11 +206,11 @@ function ManipLegs:UpdateAnimation(dt)
 			self.Snapshot, 
 			self.Target, 
 			self.BoneIterator)
-		self.LegEnt:UPMaPrintErr(runtimeflags)
+		// self.LegEnt:UPMaPrintErr(runtimeflags)
 
 		local runtimeflag = self.LegEnt:UPManipBoneBatch(lerpSnapshot, 
 			self.BoneIterator, UPManip.MANIP_FLAG.MANIP_POSITION)
-		self.LegEnt:UPMaPrintErr(runtimeflag)
+		// self.LegEnt:UPMaPrintErr(runtimeflag)
 	else
 		self.LerpT = math.Clamp(self.LerpT + self.FadeOutSpeed * dt, 0, 1)
 		
@@ -222,15 +221,15 @@ function ManipLegs:UpdateAnimation(dt)
 			self.Snapshot, 
 			LocalPlayer(), 
 			self.BoneIterator)
-		self.LegEnt:UPMaPrintErr(runtimeflags)
+		// self.LegEnt:UPMaPrintErr(runtimeflags)
 
 		local runtimeflag = self.LegEnt:UPManipBoneBatch(lerpSnapshot, 
 			self.BoneIterator, UPManip.MANIP_FLAG.MANIP_POSITION)
-		self.LegEnt:UPMaPrintErr(runtimeflag)
+		// self.LegEnt:UPMaPrintErr(runtimeflag)
 
-		// if self.LerpT >= 1 then
-		// 	self:Sleep()
-		// end
+		if self.LerpT >= 1 then
+			self:Sleep()
+		end
 	end
 
 	self.LastTarget = self.Target
@@ -238,7 +237,15 @@ end
 
 function ManipLegs:PushFrameLoop()
 	for _, v in ipairs(self.FRAME_LOOP_HOOK) do
-		hook.Add(v.EVENT_NAME, v.IDENTITY, v.CALL)
+		hook.Add(v.EVENT_NAME, v.IDENTITY, function(...)
+			local succ, result = pcall(v.CALL, self, ...)
+			if not succ then
+				hook.Remove(v.EVENT_NAME, v.IDENTITY)
+				ErrorNoHaltWithStack(result)
+			else
+				return result
+			end
+		end)
 	end
 	
 	return true
@@ -343,7 +350,7 @@ function ManipLegs:Sleep()
 	end
 
 	self.LegEnt:SetParent(nil)
-	self.LegEnt:SetNoDraw(false)
+	self.LegEnt:SetNoDraw(true)
 	self.IsWake = false
 
 	hook.Run('UPExtLegsManipSleep', self.LegEnt)
@@ -355,15 +362,22 @@ ManipLegs.MAIN_EVENT = {
 	{
 		IDENTITY = 'UPExtLegsManip',
 		EVENT_NAME = 'VMLegsPostPlayAnim',
-		CALL = function(anim)
+		CALL = function(self, anim)
 			if not IsValid(VMLegs.LegModel) or not IsValid(VMLegs.LegParent) then
 				print('[UPExt]: LegsManip: VMLegs has not been started yet!')
 				return
 			end
 
+			local animData = VMLegs:GetAnim(anim)
+			if not istable(animData) then
+				print('[UPExt]: LegsManip: VMLegs has no anim data for anim ' .. anim)
+				return
+			end
+
 			VMLegs.LegModel:SetNoDraw(true)
 
-			local self = ManipLegs
+			self.FadeInSpeed = animData.lerp_speed_in or 10
+			self.FadeOutSpeed = animData.lerp_speed_out or 5
 			self.LerpT = 0
 			self.Target = VMLegs.LegParent
 			self:Wake()
@@ -372,14 +386,15 @@ ManipLegs.MAIN_EVENT = {
 }
 
 function ManipLegs:Register()
-	print('[UPExt]: LegsManip: Register')
 	for _, v in ipairs(self.MAIN_EVENT) do
-		hook.Add(v.EVENT_NAME, v.IDENTITY, v.CALL)
+		hook.Add(v.EVENT_NAME, v.IDENTITY, function(...)
+			return v.CALL(self, ...)
+		end)
 	end
 end
 
 function ManipLegs:UnRegister()
-	print('[UPExt]: LegsManip: UnRegister')
+	self:Sleep()
 	for _, v in ipairs(self.MAIN_EVENT) do
 		hook.Remove(v.EVENT_NAME, v.IDENTITY)
 	end
@@ -389,10 +404,26 @@ function ManipLegs:UnRegister()
 	end
 end
 
+local upext_legsmanip = CreateClientConVar('upext_legsmanip', '1', true, false, '')
+-- ==============================================================
+-- 动态注册/注销
+-- ==============================================================
+local function temp_changecall(name, old, new)
+	if new == '1' then
+		print('[UPExt]: LegsManip: Register')
+		ManipLegs:Register()
+	else
+		print('[UPExt]: LegsManip: UnRegister')
+		ManipLegs:UnRegister()
+	end
+end
+cvars.AddChangeCallback('upext_legsmanip', temp_changecall, 'default')
 
-g_ManipLegs:Init()
-g_ManipLegs:Register()
-
+hook.Add('KeyPress', 'UPExtLegsManip', function()
+	hook.Remove('KeyPress', 'UPExtLegsManip')
+	temp_changecall(nil, nil, upext_legsmanip:GetBool() and '1' or '0')
+	temp_changecall = nil
+end)
 -- ==============================================================
 -- 菜单
 -- ==============================================================

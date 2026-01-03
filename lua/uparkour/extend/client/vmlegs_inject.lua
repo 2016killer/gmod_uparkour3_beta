@@ -15,24 +15,12 @@ concommand.Add('upext_vmlegs_inject', function()
 
 	VMLegs.OriginalPlayAnim = isfunction(VMLegs.OriginalPlayAnim) and VMLegs.OriginalPlayAnim or VMLegs.PlayAnim
 	VMLegs.PlayAnim = function(self, anim, ...)
-		hook.Run('VMLegsPrePlayAnim', anim)
-		self:OriginalPlayAnim(anim, ...)
-		hook.Run('VMLegsPostPlayAnim', anim)
+		local succ = self:OriginalPlayAnim(anim, ...)
+		if succ then hook.Run('VMLegsPostPlayAnim', anim) end
+		return succ
 	end
 
 	print('[UPExt]: VMLegs.PlayAnim already injected')
-	
-
-	VMLegs.OriginalRemove = isfunction(VMLegs.OriginalRemove) and VMLegs.OriginalRemove or VMLegs.Remove
-	VMLegs.Remove = function(...)
-		local anim = VMLegs:GetCurrentAnim()
-		hook.Run('VMLegsPreRemove', anim)
-		VMLegs.OriginalRemove(...)
-		hook.Run('VMLegsRemove', anim)
-	end
-
-	print('[UPExt]: VMLegs.Remove already injected')
-	
 end)
 
 concommand.Add('upext_vmlegs_recovery', function()
@@ -43,9 +31,6 @@ concommand.Add('upext_vmlegs_recovery', function()
 
 	VMLegs.PlayAnim = isfunction(VMLegs.OriginalPlayAnim) and VMLegs.OriginalPlayAnim or VMLegs.PlayAnim
 	print('[UPExt]: VMLegs.PlayAnim already recovered')
-	
-	VMLegs.Remove = isfunction(VMLegs.OriginalRemove) and VMLegs.OriginalRemove or VMLegs.Remove
-	print('[UPExt]: VMLegs.Remove already recovered')
 end)
 
 

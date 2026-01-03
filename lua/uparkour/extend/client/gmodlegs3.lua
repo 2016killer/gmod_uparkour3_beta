@@ -8,12 +8,15 @@ local upext_gmodlegs3_compat = CreateClientConVar('upext_gmodlegs3_compat', '1',
 -- ==============================================================
 -- 兼容 GmodLegs3 (启动 VMLegs 时 禁用 GmodLegs3)
 -- ==============================================================
-local function temp_upext_gmodlegs3_compat_changecall(name, old, new)
+local function temp_changecall(name, old, new)
 	local temp_identity = 'UPExtGmodLegs3Compat'
 
 	local function temp_should_disable_legs()
-		return true
 		// return VMLegs and VMLegs:IsActive()
+		// 不能直接返回 VMLegs and VMLegs:IsActive(), 因为这是布尔不是nil
+		if VMLegs and VMLegs:IsActive() then
+			return true
+		end
 	end
 
 	if new == '1' then
@@ -27,9 +30,9 @@ local function temp_upext_gmodlegs3_compat_changecall(name, old, new)
 	temp_should_disable_legs = nil
 	temp_identity = nil
 end
-cvars.AddChangeCallback('upext_gmodlegs3_compat', temp_upext_gmodlegs3_compat_changecall, 'default')
-temp_upext_gmodlegs3_compat_changecall(nil, nil, upext_gmodlegs3_compat:GetBool() and '1' or '0')
-temp_upext_gmodlegs3_compat_changecall = nil
+cvars.AddChangeCallback('upext_gmodlegs3_compat', temp_changecall, 'default')
+temp_changecall(nil, nil, upext_gmodlegs3_compat:GetBool() and '1' or '0')
+temp_changecall = nil
 
 -- ==============================================================
 -- 菜单
