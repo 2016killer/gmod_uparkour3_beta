@@ -5,7 +5,7 @@
 
 -- ==============================================================
 -- 假的 GmodLegs3 
--- 放弃将它作为工具的想法, 随便写吧...
+-- 放弃将它作为工具的想法, 已成屎山, 随便写吧...
 -- ==============================================================
 if g_ManipLegs and isentity(g_ManipLegs.LegEnt) and IsValid(g_ManipLegs.LegEnt) then
 	g_ManipLegs.LegEnt:Remove()
@@ -53,7 +53,9 @@ local temp = {
 	'ValveBiped.Bip01_R_Toe0'
 }
 ManipLegs.BoneIterator = {}
-for i, v in ipairs(temp) do ManipLegs.BoneIterator[i] = {bone = v} end
+for i, v in ipairs(temp) do 
+	ManipLegs.BoneIterator[i] = {bone = v, lerpMethod = UPManip.LERP_METHOD.LOCAL} 
+end
 UPManip.InitBoneIterator(ManipLegs.BoneIterator)
 temp = nil
 
@@ -76,7 +78,7 @@ ManipLegs.FRAME_LOOP_HOOK = {
 		EVENT_NAME = 'ShouldDisableLegs',
 		IDENTITY = 'UPExtLegsManip',
 		CALL = function()
-			// return true
+			return true
 		end
 	}
 }
@@ -85,8 +87,9 @@ ManipLegs.MagicOffset = Vector(0, 0, 5)
 ManipLegs.MagicOffsetZ0 = 8
 ManipLegs.MagicOffsetZ1 = -28
 ManipLegs.LerpT = 0
-ManipLegs.FadeInSpeed = 2
-ManipLegs.FadeOutSpeed = 2
+ManipLegs.FadeInSpeed = 10
+ManipLegs.FadeOutSpeed = 3
+ManipLegs.PelvisFadeInRate = 5
 ManipLegs.Speed = 0
 
 function ManipLegs:UpdatePosition()
@@ -143,6 +146,16 @@ function ManipLegs:UpdateAnimation(dt)
 		local snapshot, runtimeflags = self.LegEnt:UPMaSnapshot(self.BoneIterator)
 		self.LegEnt:UPMaPrintErr(runtimeflags)
 		self.Snapshot = snapshot
+
+		// for _, v in pairs(self.Snapshot) do
+		// 	debugoverlay.Box(
+		// 		v:GetTranslation(), 
+		// 		Vector(-1, -1, -1), 
+		// 		Vector(1, 1, 1), 
+		// 		10, 
+		// 		Color(255, 0, 0)
+		// 	)
+		// end
 	end
 
 	if isentity(self.Target) and IsValid(self.Target) then
@@ -175,16 +188,24 @@ function ManipLegs:UpdateAnimation(dt)
 
 		local Bip01_Pelvis_snapshot = self.Snapshot and self.Snapshot['ValveBiped.Bip01_Pelvis']
 		local Bip01_Pelvis_lerpSnapshot = lerpSnapshot['ValveBiped.Bip01_Pelvis']
-		if Bip01_Pelvis_snapshot and Bip01_Pelvis_lerpSnapshot then
-			lerpSnapshot['ValveBiped.Bip01_Pelvis'] = {
-				LerpVector(self.LerpT, Bip01_Pelvis_snapshot:GetTranslation(), self.NewPos),
-				Bip01_Pelvis_lerpSnapshot[2],
-				Bip01_Pelvis_lerpSnapshot[3]
-			}
-
-			// print(self.NewPos - 
-			// lerpSnapshot['ValveBiped.Bip01_Pelvis'][1]
-			// )
+		local Bip01_Pelvis_boneId = LocalPlayer():LookupBone('ValveBiped.Bip01_Pelvis')
+		if Bip01_Pelvis_snapshot and Bip01_Pelvis_lerpSnapshot and Bip01_Pelvis_boneId then
+			local Bip01_Pelvis_ply = LocalPlayer():GetBoneMatrix(Bip01_Pelvis_boneId)
+			if Bip01_Pelvis_ply then
+				local Bip01_Pelvis_posl = WorldToLocal(
+					Bip01_Pelvis_ply:GetTranslation(), 
+					Bip01_Pelvis_ply:GetAngles(), 
+					LocalPlayer():GetPos(), 
+					self.NewAngle
+				)
+				Bip01_Pelvis_lerpSnapshot:SetTranslation(
+					LerpVector(
+						math.Clamp(self.LerpT * self.PelvisFadeInRate, 0, 1),
+						Bip01_Pelvis_snapshot:GetTranslation(), 
+						self.LegEnt:LocalToWorld(Bip01_Pelvis_posl)
+					)	
+				) 
+			end
 		end
 		
 		local runtimeflag = self.LegEnt:UPManipBoneBatch(lerpSnapshot, 
@@ -194,11 +215,6 @@ function ManipLegs:UpdateAnimation(dt)
 		// if self.LerpT >= 1 then
 		// 	self:Sleep()
 		// end
-
-		// print(
-		// 	self.NewPos -
-		// 	self.LegEnt:GetBonePosition(self.LegEnt:LookupBone('ValveBiped.Bip01_Pelvis'))
-		// )
 	end
 
 	self.LastTarget = self.Target

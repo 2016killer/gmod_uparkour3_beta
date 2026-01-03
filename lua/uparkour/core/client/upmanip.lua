@@ -322,7 +322,11 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 		local tarBoneName = mappingData.tarBone or boneName
 		local offsetMatrix = mappingData.offset
 		local lerpMethod = mappingData.lerpMethod or CALL_FLAG_LERP_LOCAL
-
+		
+		-- 害没办法, 不在这里拦截的话, 外部调用会算的头昏眼花
+		local GetInitBoneMatrix = mappingData.GetInitBoneMatrix or GetBoneMatrixFromSnapshot
+		local GetFinalBoneMatrix = mappingData.GetFinalBoneMatrix or GetBoneMatrixFromSnapshot
+		
 		-- 根节点只能使用世界空间插值
 		local boneId = self:LookupBone(boneName)
 		if not boneId then 
@@ -333,19 +337,19 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 		lerpMethod = parentId == -1 and CALL_FLAG_LERP_WORLD or lerpMethod
 
 
-		local initMatrix = GetBoneMatrixFromSnapshot(boneName, snapshot or self)
+		local initMatrix = GetInitBoneMatrix(boneName, snapshot or self)
 		if not initMatrix then 
 			flags[boneName] = bit.bor(ERR_FLAG_MATRIX, lerpMethod)
 			continue
 		end
 
-		local finalMatrix = GetBoneMatrixFromSnapshot(tarBoneName, tarSnapshotOrEnt)
+		local finalMatrix = GetFinalBoneMatrix(tarBoneName, tarSnapshotOrEnt)
 		if not finalMatrix then 
 			flags[boneName] = bit.bor(ERR_FLAG_TAR_BONEID, lerpMethod)
 			continue
 		end
-		
-		if lerpMethod == CALL_FLAG_LERP_WORLD then
+
+		if lerpMethod == CALL_FLAG_LERP_WORLD then	
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
 
 			local result = Matrix()
@@ -359,13 +363,13 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			local parentName = mappingData.parent and mappingData.parent or self:GetBoneName(parentId)
 			local tarParentName = mappingData.tarParent or parentName
 
-			local parentMatrix = GetBoneMatrixFromSnapshot(parentName, snapshot or self)
+			local parentMatrix = GetInitBoneMatrix(parentName, snapshot or self)
 			if not parentMatrix then 
 				flags[boneName] = bit.bor(ERR_FLAG_PARENT_MATRIX, lerpMethod)
 				continue 
 			end
 
-			local tarParentMatrix = GetBoneMatrixFromSnapshot(tarParentName, tarSnapshotOrEnt)
+			local tarParentMatrix = GetFinalBoneMatrix(tarParentName, tarSnapshotOrEnt)
 			if not tarParentMatrix then 
 				flags[boneName] = bit.bor(ERR_FLAG_TAR_PARENT_MATRIX, lerpMethod)
 				continue 
@@ -476,7 +480,7 @@ function ENTITY:UPMaPrintErr(runtimeflag, boneName, depth)
 	end
 end
 
-
+UPManip.LERP_METHOD = {LOCAL = CALL_FLAG_LERP_LOCAL, WORLD = CALL_FLAG_LERP_WORLD}
 UPManip.RUNTIME_FLAG_MSG = RUNTIME_FLAG_MSG
 UPManip.GetBoneMatrixFromSnapshot = GetBoneMatrixFromSnapshot
 UPManip.GetMatrixLocal = GetMatrixLocal
