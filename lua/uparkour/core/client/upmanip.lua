@@ -453,11 +453,17 @@ function ENTITY:UPMaPrintErr(runtimeflag, boneName, depth)
 			self:UPMaPrintErr(flag, boneName, depth + 1)
 		end
 	elseif isnumber(runtimeflag) then
+		local totalmsg = {}
 		for flag, msg in pairs(RUNTIME_FLAG_MSG) do
-			if bit.band(runtimeflag, flag) == flag then
-				print(string.format('err: %s, ent: %s, bone: %s, msg: %s', flag, self, boneName, msg))
+			if bit.band(runtimeflag, flag) == flag then 
+				table.insert(totalmsg, msg) 
 			end
 		end
+		if #totalmsg == 0 then return end
+		print(string.format('============%s===========', self))
+		print('boneName:', boneName)
+		print('errcode:', runtimeflag)
+		print(table.concat(totalmsg, ', '))
 	else
 		print('Warn: unknown flags type, expect number or table, got', type(runtimeflag))
 		return
@@ -527,6 +533,10 @@ concommand.Add('upmanip_test_world', function(ply)
 	mossman2:SetPos(pos)
 
 	local boneIterator = {
+		{
+			bone = 'Throw_Err_Example'
+		},
+		
 		{
 			bone = 'ValveBiped.Bip01_Pelvis',
 			ang = Angle(0, 0, 90),
