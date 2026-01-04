@@ -15,8 +15,22 @@ concommand.Add('upext_vmlegs_inject', function()
 
 	VMLegs.OriginalPlayAnim = isfunction(VMLegs.OriginalPlayAnim) and VMLegs.OriginalPlayAnim or VMLegs.PlayAnim
 	VMLegs.PlayAnim = function(self, anim, ...)
+		-- 原版返回值只有 false 和 nil, 无法判断是否成功
+		-- 我也不知道他这么设计有什么意义, 所以我不确定的修改是否会引起其他问题
+
 		local succ = self:OriginalPlayAnim(anim, ...)
-		if succ then hook.Run('VMLegsPostPlayAnim', anim) end
+		if succ == false then return succ end
+
+		-- 项目快了结了, 稳一点吧
+		succ = not LocalPlayer():ShouldDrawLocalPlayer() 
+			and IsValid(self.LegModel)
+			and IsValid(self.LegParent)
+		
+		if succ then 
+			self.Duration = self.LegParent:SequenceDuration(self.SeqID)
+			hook.Run('VMLegsPostPlayAnim', anim) 
+		end
+
 		return succ
 	end
 
