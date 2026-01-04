@@ -374,3 +374,6 @@ AddCSLuaFile()
 
 ReloadAll = nil
 Debug = nil
+
+
+hook.Run('UParkourInitialized')
