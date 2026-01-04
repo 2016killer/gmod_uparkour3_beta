@@ -279,6 +279,7 @@ end
 
 function ENTITY:UPMaSnapshot(boneIterator)
 	-- 默认已经初始化验证过了, 这里不再重复验证
+	local SnapshotHandler = boneIterator.SnapshotHandler
 	local snapshot = {}
 	local flags = {}
 
@@ -300,6 +301,11 @@ function ENTITY:UPMaSnapshot(boneIterator)
 		snapshot[boneName] = matrix
 		flags[boneName] = SUCC_FLAG
 	end
+
+	if isfunction(SnapshotHandler) then
+		SnapshotHandler(self, snapshot, flags)
+	end
+
 	return snapshot, flags
 end
 
@@ -507,6 +513,7 @@ UPManip.InitBoneIterator = function(boneIterator)
 	-- parent 和 tarParent 字段仅对局部空间插值有效
 
 	assert(istable(boneIterator), string.format('invalid boneIterator, expect table, got %s', type(boneIterator)))
+	assert(isfunction(boneIterator.SnapshotHandler) or boneIterator.SnapshotHandler == nil, string.format('boneIterator.SnapshotHandler is invalid, expect (function or nil), got %s', type(boneIterator.SnapshotHandler)))
 	assert(isfunction(boneIterator.LerpRangeHandler) or boneIterator.LerpRangeHandler == nil, string.format('boneIterator.LerpRangeHandler is invalid, expect (function or nil), got %s', type(boneIterator.LerpRangeHandler)))
 	assert(isfunction(boneIterator.UnpackMappingData) or boneIterator.UnpackMappingData == nil, string.format('boneIterator.UnpackMappingData is invalid, expect (function or nil), got %s', type(boneIterator.UnpackMappingData)))
 
