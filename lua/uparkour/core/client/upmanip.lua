@@ -314,7 +314,7 @@ local function GetBoneMatrixFromSnapshot(boneName, snapshotOrEnt)
 	return snapshotOrEnt:GetBoneMatrix(boneId)
 end
 
-function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
+function ENTITY:UPMaLerpBoneBatch(t, snapshotOrEnt, tarSnapshotOrEnt, boneIterator)
 	-- 一般在帧循环中调用, 所以不作验证
 	-- 在调用前最好使用 ent:SetupBones(), 否则可能获得错误数据
 	-- 每帧都要更新
@@ -329,7 +329,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 	for _, mappingData in ipairs(boneIterator) do
 		-- 添加一些动态特性吧
 		mappingData = UnpackMappingData
-			and UnpackMappingData(self, t, snapshot, tarSnapshotOrEnt, mappingData) 
+			and UnpackMappingData(self, t, snapshotOrEnt, tarSnapshotOrEnt, mappingData) 
 			or mappingData
 
 		local boneName = mappingData.bone
@@ -347,7 +347,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 		lerpMethod = parentId == -1 and CALL_FLAG_LERP_WORLD or lerpMethod
 
 
-		local initMatrix = GetBoneMatrixFromSnapshot(boneName, snapshot or self)
+		local initMatrix = GetBoneMatrixFromSnapshot(boneName, snapshotOrEnt)
 		if not initMatrix then 
 			flags[boneName] = bit.bor(ERR_FLAG_MATRIX, lerpMethod)
 			continue
@@ -362,7 +362,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 		if lerpMethod == CALL_FLAG_LERP_WORLD then	
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
 			if LerpRangeHandler then
-				initMatrix, finalMatrix = LerpRangeHandler(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+				initMatrix, finalMatrix = LerpRangeHandler(self, t, snapshotOrEnt, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
 			end
 
 			local result = Matrix()
@@ -376,7 +376,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			local parentName = mappingData.parent and mappingData.parent or self:GetBoneName(parentId)
 			local tarParentName = mappingData.tarParent or parentName
 
-			local parentMatrix = GetBoneMatrixFromSnapshot(parentName, self)
+			local parentMatrix = GetBoneMatrixFromSnapshot(parentName, snapshotOrEnt)
 			if not parentMatrix then 
 				flags[boneName] = bit.bor(ERR_FLAG_PARENT_MATRIX, lerpMethod)
 				continue 
@@ -403,7 +403,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
 
 			if LerpRangeHandler then
-				initMatrix, finalMatrix = LerpRangeHandler(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+				initMatrix, finalMatrix = LerpRangeHandler(self, t, snapshotOrEnt, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
 			end
 
 			local result = Matrix()
@@ -597,7 +597,7 @@ concommand.Add('upmanip_test_world', function(ply)
 		mossman:SetupBones()
 
 		local lerpSnapshot, runtimeflags = mossman:UPMaLerpBoneBatch(
-			0.1, nil, mossman2, boneIterator)
+			0.1, mossman, mossman2, boneIterator)
 		mossman:UPMaPrintErr(runtimeflags)
 		local runtimeflag = mossman:UPManipBoneBatch(lerpSnapshot, 
 			boneIterator, MANIP_MATRIX)
@@ -667,7 +667,7 @@ concommand.Add('upmanip_test_local', function(ply)
 		mossman:SetupBones()
 
 		local lerpSnapshot, runtimeflags = mossman:UPMaLerpBoneBatch(
-			0.1, nil, mossman2, boneIterator)
+			0.1, mossman, mossman2, boneIterator)
 		mossman:UPMaPrintErr(runtimeflags)
 		local runtimeflag = mossman:UPManipBoneBatch(lerpSnapshot, 
 			boneIterator, MANIP_MATRIX)
