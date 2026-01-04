@@ -42,6 +42,7 @@ This is a **pure client-side** API that directly controls bones via native metho
 5. Recursive error printing functionality outputs all bone exception information with one click, significantly reducing debugging effort.
 6. Granular manipulation flags (`MANIP_FLAG`) support combined operations (position-only, angle-only, scale-only, etc.) for maximum flexibility.
 7. Automatic root node adaptation: Automatically identifies root nodes during local-space interpolation and forces a switch to world-space interpolation without manual intervention.
+8. Supports insertable custom callbacks to dynamically modify interpolation behavior and targets, providing extremely strong extensibility.
 
 ### Disadvantages:
 1. High computational overhead: Each call requires multiple matrix inverse and multiplication operations via Lua.
@@ -73,14 +74,93 @@ local boneIterator = {
         lerpMethod = CALL_FLAG_LERP_WORLD -- Optional: Interpolation type (defaults to `CALL_FLAG_LERP_LOCAL` if not specified)
     },
     -- Additional bone configurations...
+    -- Top-level callback fields (globally effective, optional)
+    UnpackMappingData = nil, -- Optional: Callback for dynamically unpacking bone configuration
+    LerpRangeHandler = nil, -- Optional: Callback for redirecting interpolation targets
 }
 ```
 - Required Field: `bone` (target bone name)
 - Optional Fields: `tarBone`, `parent`, `tarParent`, `ang`, `pos`, `scale`, `lerpMethod`
+- Top-Level Callback Fields: `UnpackMappingData`, `LerpRangeHandler` (globally effective for the iterator, optional)
 - Initialization: Must be initialized via `UPManip.InitBoneIterator(boneIterator)` to validate types and generate offset matrices.
 
 ### 3. Snapshot
 A table structure that caches bone transformation matrices, with bone names as keys and bone matrices as values. Generated via `ent:UPMaSnapshot(boneIterator)`, it reduces redundant `GetBoneMatrix` calls in the frame loop to improve performance.
+
+### 4. Insertable Callbacks
+The bone iterator supports two top-level custom callbacks for dynamically extending interpolation behavior without modifying the core UPManip logic, providing strong extensibility.
+
+#### 4.1 UnpackMappingData: Add Dynamic Features to Interpolation Behavior
+```note
+Purpose: Dynamically unpack/modify the configuration data (`mappingData`) of a single bone before interpolation execution, supporting adjustments to bone offsets, parent nodes, interpolation types, etc., based on runtime states.
+Scope: Top-level field of the bone iterator, globally effective.
+Parameter List:
+1.  self: The entity currently executing interpolation (Entity)
+2.  t: Interpolation factor (number, consistent with the `t` parameter of `UPMaLerpBoneBatch`)
+3.  snapshot: Bone snapshot of the current entity (table, optional, may be `nil`)
+4.  tarSnapshotOrEnt: Target entity or target bone snapshot (Entity/table)
+5.  mappingData: Original configuration data of the current bone (table)
+Return Value: Modified bone configuration data (table). If `nil` is returned, the original configuration will be used.
+Use Cases:
+-  Dynamically adjust bone offsets in the frame loop (e.g., modify angle offset based on entity state)
+-  Switch interpolation types at runtime (e.g., temporarily switch from local interpolation to world interpolation in certain scenarios)
+-  Dynamically specify custom parent bones to achieve more flexible bone hierarchy control
+```
+Example:
+```lua
+local boneIterator = {
+    { bone = "ValveBiped.Bip01_Head1" },
+    -- Dynamically modify bone configuration
+    UnpackMappingData = function(self, t, snapshot, tarSnapshotOrEnt, mappingData)
+        -- Dynamically adjust angle offset based on interpolation factor
+        mappingData.ang = Angle(90 * t, 0, 0)
+        -- Switch interpolation type at runtime based on entity velocity
+        if self:GetVelocity():Length() > 0 then
+            mappingData.lerpMethod = CALL_FLAG_LERP_WORLD
+        else
+            mappingData.lerpMethod = CALL_FLAG_LERP_LOCAL
+        end
+        return mappingData
+    end
+}
+```
+
+#### 4.2 LerpRangeHandler: Allow Redirecting Interpolation Targets
+```note
+Purpose: Redirect/modify the initial matrix (`initMatrix`) and target matrix (`finalMatrix`) before interpolation calculation, supporting custom interpolation ranges, target posture correction, and other operations.
+Scope: Top-level field of the bone iterator, globally effective.
+Parameter List:
+1.  self: The entity currently executing interpolation (Entity)
+2.  t: Interpolation factor (number, consistent with the `t` parameter of `UPMaLerpBoneBatch`)
+3.  snapshot: Bone snapshot of the current entity (table, optional, may be `nil`)
+4.  tarSnapshotOrEnt: Target entity or target bone snapshot (Entity/table)
+5.  initMatrix: Initial transformation matrix of the current bone (matrix)
+6.  finalMatrix: Target transformation matrix of the current bone (matrix)
+7.  mappingData: Configuration data of the current bone (table, already processed by `UnpackMappingData`)
+Return Value: Modified initial matrix (`initMatrix`) and target matrix (`finalMatrix`). If `nil` is returned, the original matrices will be used.
+Use Cases:
+-  Redirect interpolation targets (e.g., limit bone rotation angle range to avoid excessive deformation)
+-  Correct target bone postures (e.g., compensate for abnormal matrices to solve clipping issues)
+-  Custom interpolation logic (e.g., add ease-in/ease-out effects to replace linear interpolation)
+```
+Example:
+```lua
+local boneIterator = {
+    { bone = "ValveBiped.Bip01_Head1" },
+    -- Redirect interpolation targets and limit rotation range
+    LerpRangeHandler = function(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+        -- Get initial and target angles
+        local initAng = initMatrix:GetAngles()
+        local finalAng = finalMatrix:GetAngles()
+        -- Limit X-axis rotation between -90 and 90 degrees
+        finalAng.p = math.Clamp(finalAng.p, -90, 90)
+        -- Update target matrix
+        finalMatrix:SetAngles(finalAng)
+        -- Return modified matrices
+        return initMatrix, finalMatrix
+    end
+}
+```
 
 ## Available Methods
 ### Bone Hierarchy Related
@@ -194,15 +274,17 @@ Parameter Descriptions:
 - t: Interpolation factor (recommended 0-1; values outside this range cause over-interpolation)
 - snapshot: Current entity's bone snapshot (optional; if not specified, bone matrices are retrieved directly from the entity)
 - tarSnapshotOrEnt: Target entity or target bone snapshot
-- boneIterator: Pre-initialized bone iterator
+- boneIterator: Pre-initialized bone iterator (supports `UnpackMappingData` and `LerpRangeHandler` callbacks)
 Return Values:
 - lerpSnapshot: Interpolation snapshot (keys = bone names, values = {pos, ang, scale})
 - flags: Status flag table (keys = bone names, values = bit flags)
 Internal Logic:
-1. Automatically identifies root nodes and forces a switch to world-space interpolation
-2. Supports two interpolation modes: World-Space (`CALL_FLAG_LERP_WORLD`) and Local-Space (`CALL_FLAG_LERP_LOCAL`)
-3. Automatically applies bone offset matrices and processes custom parent configurations
-4. Records error flags for failed interpolation and skips the current bone without affecting other bones
+1.  Automatically identifies root nodes and forces a switch to world-space interpolation
+2.  Supports two interpolation modes: World-Space (`CALL_FLAG_LERP_WORLD`) and Local-Space (`CALL_FLAG_LERP_LOCAL`)
+3.  First executes the `UnpackMappingData` callback to dynamically process bone configuration data
+4.  Automatically applies bone offset matrices and processes custom parent configurations
+5.  Executes the `LerpRangeHandler` callback to redirect/correct interpolation matrices
+6.  Records error flags for failed interpolation and skips the current bone without affecting other bones
 It is recommended to execute `ent:SetupBones()` and `targetEntity:SetupBones()` (when passing an entity) before calling.
 ```
 
@@ -224,9 +306,11 @@ Use Case: Output all exception information with one click during debugging to qu
 ```note
 Validates the validity of the bone iterator and converts angle/position/scale offsets in the configuration into an offset matrix (`offset`).
 Validation Rules:
-1. The bone iterator must be a table
-2. Iterator elements must be tables containing the `bone` field (string type)
-3. Offset configurations (`ang`/`pos`/`scale`) must be `angle`/`vector` types or `nil`
+1.  The bone iterator must be a table
+2.  Iterator elements must be tables containing the `bone` field (string type)
+3.  Offset configurations (`ang`/`pos`/`scale`) must be `angle`/`vector` types or `nil`
+4.  Top-level callbacks (`UnpackMappingData`/`LerpRangeHandler`) must be `function` types or `nil`
+5.  Other custom fields (`tarBone`/`parent`/`tarParent`/`lerpMethod`) must have valid types
 Triggers an `assert` error for type mismatches to avoid runtime errors in advance.
 Conversion Rule: Automatically merges `ang`, `pos`, and `scale` into an `offset` matrix for additional adjustments during interpolation.
 ```
@@ -270,14 +354,25 @@ ERR_FLAG_SINGULAR = 0x04 -- Singular matrix
 
 ## Complete Workflow Example
 ```lua
--- 1. Create and initialize the bone iterator
+-- 1. Create and initialize the bone iterator (with custom callbacks)
 local boneIterator = {
     {
         bone = "ValveBiped.Bip01_Head1",
-        ang = Angle(90, 0, 0),
-        scale = Vector(2, 2, 2),
         lerpMethod = CALL_FLAG_LERP_WORLD
-    }
+    },
+    -- Dynamically modify bone configuration
+    UnpackMappingData = function(self, t, snapshot, tarSnapshotOrEnt, mappingData)
+        -- Dynamically adjust angle offset based on interpolation factor
+        mappingData.ang = Angle(90 * t, 0, 0)
+        return mappingData
+    end,
+    -- Redirect interpolation targets and limit rotation range
+    LerpRangeHandler = function(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+        local finalAng = finalMatrix:GetAngles()
+        finalAng.p = math.Clamp(finalAng.p, -90, 90) -- Limit X-axis rotation
+        finalMatrix:SetAngles(finalAng)
+        return initMatrix, finalMatrix
+    end
 }
 UPManip.InitBoneIterator(boneIterator)
 
@@ -298,7 +393,7 @@ timer.Create("upmanip_demo", 0, 0, function()
     ent:SetupBones()
     tarEnt:SetupBones()
 
-    -- 3.2 Batch interpolation
+    -- 3.2 Batch interpolation (automatically executes custom callbacks)
     local lerpSnapshot, lerpFlags = ent:UPMaLerpBoneBatch(0.1, nil, tarEnt, boneIterator)
     ent:UPMaPrintErr(lerpFlags) -- Print interpolation errors
 

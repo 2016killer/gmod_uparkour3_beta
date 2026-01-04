@@ -41,6 +41,7 @@
 5.  递归错误打印功能, 一键输出所有骨骼的异常信息, 大幅降低排错难度。
 6.  精细化操纵标志（MANIP_FLAG）, 支持仅位置、仅角度、仅缩放等组合操纵, 灵活性拉满。
 7.  根节点自动适配: 局部插值中自动识别根节点, 并强制切换为世界空间插值, 无需手动干预。
+8.  支持可插入自定义回调, 动态修改插值行为与目标, 扩展性极强。
 
 缺点:
 1.  运算量较大, 每次都需通过 Lua 进行多次矩阵逆运算和乘法运算。
@@ -72,14 +73,93 @@ local boneIterator = {
         lerpMethod = CALL_FLAG_LERP_WORLD -- 可选：插值类型，默认 CALL_FLAG_LERP_LOCAL
     },
     -- 其他骨骼配置...
+    -- 迭代器顶层支持自定义回调（全局生效）
+    UnpackMappingData = nil, -- 可选：动态解包骨骼配置回调
+    LerpRangeHandler = nil, -- 可选：插值目标重定向回调
 }
 ```
 -  必选字段：`bone`（目标骨骼名）
 -  可选字段：`tarBone`、`parent`、`tarParent`、`ang`、`pos`、`scale`、`lerpMethod`
+-  顶层回调字段：`UnpackMappingData`、`LerpRangeHandler`（迭代器全局生效，可选）
 -  初始化：需通过 `UPManip.InitBoneIterator(boneIterator)` 验证类型并生成偏移矩阵（offset）
 
 ### 3.  快照（Snapshot）
 缓存骨骼变换矩阵的表结构，键为骨骼名，值为骨骼矩阵，由 `ent:UPMaSnapshot(boneIterator)` 生成，用于减少帧循环中重复的 `GetBoneMatrix` 调用，提升性能。
+
+### 4.  可插入回调（Insertable Callback）
+骨骼迭代器支持两个顶层自定义回调，用于动态扩展插值行为，无需修改UPManip核心逻辑，扩展性极强。
+
+#### 4.1  UnpackMappingData：添加插值行为的动态特性
+```note
+作用：插值执行前动态解包/修改单个骨骼的配置数据（mappingData），支持根据运行时状态调整骨骼偏移、父级、插值类型等配置。
+所属：骨骼迭代器（boneIterator）顶层字段，全局生效。
+参数列表：
+1.  self：当前执行插值的实体（Entity）
+2.  t：插值因子（number，与 UPMaLerpBoneBatch 的 t 参数一致）
+3.  snapshot：当前实体的骨骼快照（table，可选，可能为 nil）
+4.  tarSnapshotOrEnt：目标实体或目标骨骼快照（Entity/table）
+5.  mappingData：当前骨骼的原始配置数据（table）
+返回值：修改后的骨骼配置数据（table），若返回 nil 则使用原始配置。
+用途：
+-  帧循环中动态调整骨骼偏移（如根据实体状态修改角度偏移量）
+-  运行时切换插值类型（如某些场景下临时将局部插值改为世界插值）
+-  动态指定自定义父骨骼，实现更灵活的骨骼层级控制
+```
+示例：
+```lua
+local boneIterator = {
+    { bone = "ValveBiped.Bip01_Head1" },
+    -- 动态修改骨骼配置
+    UnpackMappingData = function(self, t, snapshot, tarSnapshotOrEnt, mappingData)
+        -- 根据插值因子动态调整角度偏移
+        mappingData.ang = Angle(90 * t, 0, 0)
+        -- 运行时切换插值类型
+        if self:GetVelocity():Length() > 0 then
+            mappingData.lerpMethod = CALL_FLAG_LERP_WORLD
+        else
+            mappingData.lerpMethod = CALL_FLAG_LERP_LOCAL
+        end
+        return mappingData
+    end
+}
+```
+
+#### 4.2  LerpRangeHandler：允许重定向插值目标
+```note
+作用：插值计算前重定向/修改初始矩阵（initMatrix）和目标矩阵（finalMatrix），支持自定义插值范围、修正目标姿态等操作。
+所属：骨骼迭代器（boneIterator）顶层字段，全局生效。
+参数列表：
+1.  self：当前执行插值的实体（Entity）
+2.  t：插值因子（number，与 UPMaLerpBoneBatch 的 t 参数一致）
+3.  snapshot：当前实体的骨骼快照（table，可选，可能为 nil）
+4.  tarSnapshotOrEnt：目标实体或目标骨骼快照（Entity/table）
+5.  initMatrix：当前骨骼的初始变换矩阵（matrix）
+6.  finalMatrix：当前骨骼的目标变换矩阵（matrix）
+7.  mappingData：当前骨骼的配置数据（table，已通过 UnpackMappingData 处理）
+返回值：修改后的初始矩阵（initMatrix）和目标矩阵（finalMatrix），若返回 nil 则使用原始矩阵。
+用途：
+-  重定向插值目标（如限制骨骼旋转角度范围，避免过度变形）
+-  修正目标骨骼姿态（如对异常矩阵进行补偿，解决穿模问题）
+-  自定义插值逻辑（如添加缓入缓出效果，替代线性插值）
+```
+示例：
+```lua
+local boneIterator = {
+    { bone = "ValveBiped.Bip01_Head1" },
+    -- 重定向插值目标，限制旋转范围
+    LerpRangeHandler = function(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+        -- 获取初始和目标角度
+        local initAng = initMatrix:GetAngles()
+        local finalAng = finalMatrix:GetAngles()
+        -- 限制X轴旋转在 -90 ~ 90 之间
+        finalAng.p = math.Clamp(finalAng.p, -90, 90)
+        -- 更新目标矩阵
+        finalMatrix:SetAngles(finalAng)
+        -- 返回修改后的矩阵
+        return initMatrix, finalMatrix
+    end
+}
+```
 
 ## 可用方法
 ### 骨骼层级相关
@@ -193,15 +273,17 @@ local boneIterator = {
 - t：插值因子（建议 0-1，超出范围会过度插值）
 - snapshot：当前实体的骨骼快照（可选，不传则直接从实体获取骨骼矩阵）
 - tarSnapshotOrEnt：目标实体或目标骨骼快照
-- boneIterator：骨骼迭代器（需提前初始化）
+- boneIterator：骨骼迭代器（需提前初始化，支持 UnpackMappingData 和 LerpRangeHandler 回调）
 返回值：
 - lerpSnapshot：插值快照（key=骨骼名，value={pos, ang, scale}）
 - flags：状态标志表（key=骨骼名，value=位标志）
 内部逻辑：
 1.  自动识别根节点，强制切换为世界空间插值
 2.  支持世界空间（CALL_FLAG_LERP_WORLD）和局部空间（CALL_FLAG_LERP_LOCAL）两种插值模式
-3.  自动应用骨骼偏移矩阵（offset），处理父级自定义配置
-4.  插值失败时记录错误标志，跳过当前骨骼，不影响其他骨骼执行
+3.  先执行 UnpackMappingData 回调，动态处理骨骼配置数据
+4.  自动应用骨骼偏移矩阵（offset），处理父级自定义配置
+5.  执行 LerpRangeHandler 回调，重定向/修正插值矩阵
+6.  插值失败时记录错误标志，跳过当前骨骼，不影响其他骨骼执行
 调用前建议执行 ent:SetupBones() 和 目标实体:SetupBones()（传入实体时）。
 ```
 
@@ -226,6 +308,8 @@ local boneIterator = {
 1.  骨骼迭代器必须是表类型
 2.  迭代器元素必须是表类型，且包含 `bone` 字段（字符串类型）
 3.  偏移配置（ang/pos/scale）必须是 angle/vector 类型或 nil
+4.  顶层回调（UnpackMappingData/LerpRangeHandler）必须是 function 类型或 nil
+5.  其他自定义字段（tarBone/parent/tarParent/lerpMethod）类型合法
 类型错误时触发 assert 断言报错，提前规避运行时错误。
 转换规则：自动将 ang、pos、scale 合并为 offset 矩阵，用于插值时的额外调整。
 ```
@@ -254,7 +338,7 @@ CALL_FLAG_LERP_WORLD = 0x1000 -- 世界空间插值
 CALL_FLAG_LERP_LOCAL = 0x2000 -- 局部空间插值
 
 -- 调用类型
-CALL_FLAG_SET_POSITION = 0x4000 -- 调用 UP MaSetBonePosition
+CALL_FLAG_SET_POSITION = 0x4000 -- 调用 UPMaSetBonePosition
 CALL_FLAG_SNAPSHOT = 0x8000 -- 调用 UPMaSnapshot
 CALL_FLAG_SET_POS = 0x20000 -- 调用 UPMaSetBonePos
 CALL_FLAG_SET_ANG = 0x40000 -- 调用 UPMaSetBoneAng
@@ -269,14 +353,25 @@ ERR_FLAG_SINGULAR = 0x04 -- 矩阵奇异
 
 ## 完整工作流示例
 ```lua
--- 1.  创建并初始化骨骼迭代器
+-- 1.  创建并初始化骨骼迭代器（包含自定义回调）
 local boneIterator = {
     {
         bone = "ValveBiped.Bip01_Head1",
-        ang = Angle(90, 0, 0),
-        scale = Vector(2, 2, 2),
         lerpMethod = CALL_FLAG_LERP_WORLD
-    }
+    },
+    -- 动态修改骨骼配置
+    UnpackMappingData = function(self, t, snapshot, tarSnapshotOrEnt, mappingData)
+        -- 根据插值因子动态调整角度偏移
+        mappingData.ang = Angle(90 * t, 0, 0)
+        return mappingData
+    end,
+    -- 重定向插值目标，限制旋转范围
+    LerpRangeHandler = function(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+        local finalAng = finalMatrix:GetAngles()
+        finalAng.p = math.Clamp(finalAng.p, -90, 90) -- 限制X轴旋转
+        finalMatrix:SetAngles(finalAng)
+        return initMatrix, finalMatrix
+    end
 }
 UPManip.InitBoneIterator(boneIterator)
 
@@ -297,7 +392,7 @@ timer.Create("upmanip_demo", 0, 0, function()
     ent:SetupBones()
     tarEnt:SetupBones()
 
-    -- 3.2  批量插值
+    -- 3.2  批量插值（自动执行自定义回调）
     local lerpSnapshot, lerpFlags = ent:UPMaLerpBoneBatch(0.1, nil, tarEnt, boneIterator)
     ent:UPMaPrintErr(lerpFlags) -- 打印插值错误
 

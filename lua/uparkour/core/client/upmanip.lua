@@ -86,9 +86,13 @@ local RUNTIME_FLAG_MSG = {
 	[CALL_FLAG_SET_SCALE] = 'call: set scale',
 }
 
-local function IsMatrixSingular(mat)
+local function IsMatrixSingularFast(mat)
 	-- 这个方法并不严谨, 只是工程化方案, 比直接求逆快很多
 	-- 如果它底层是先算行列式的话
+	-- 注意: 此方案只是筛选明显的奇异矩阵, 因为在骨骼相关场景中, 大部分奇异是缩放导致的
+	-- 当然, 完全有理由认为加了这个会更慢, 因为在两种混合比例达到一定程度时, 这是没必要的
+	-- 优化还是得考虑场景的
+	
 	local forward = mat:GetForward()
 	local up = mat:GetUp()
 	local right = mat:GetRight()
@@ -97,19 +101,20 @@ local function IsMatrixSingular(mat)
 	or right:LengthSqr() < zero
 end
 
-local function GetInverse(mat)
-	return not IsMatrixSingular(mat) and mat:GetInverse() or nil
-end
+// local function GetInverse(mat)
+// 	-- 同上, 这一步在正常情况下是不必要的, 反而更慢
+// 	return not IsMatrixSingularFast(mat) and mat:GetInverse() or nil
+// end
 
 local function GetMatrixLocal(mat, parentMat, invert)
 	if invert then
-		if IsMatrixSingular(parentMat) then return nil end
-		local matInvert = GetInverse(mat)
+		if IsMatrixSingularFast(parentMat) then return nil end
+		local matInvert = mat:GetInverse()
 		if not matInvert then return nil end
 		return matInvert * parentMat
 	else
-		if IsMatrixSingular(mat) then return nil end
-		local parentMatInvert = GetInverse(parentMat)
+		if IsMatrixSingularFast(mat) then return nil end
+		local parentMatInvert = parentMat:GetInverse()
 		if not parentMatInvert then return nil end
 		return parentMatInvert * mat
 	end
@@ -184,10 +189,10 @@ function ENTITY:UPMaSetBonePosition(boneName, posw, angw)
 	local parentTransform = parentId == -1 and self:GetWorldTransformMatrix() or self:GetBoneMatrix(parentId)
 	if not parentTransform then return bit.bor(ERR_FLAG_PARENT, CALL_FLAG_SET_POSITION) end
 
-	local curTransformInvert = GetInverse(curTransform)
+	local curTransformInvert = curTransform:GetInverse()
 	if not curTransformInvert then return bit.bor(ERR_FLAG_SINGULAR, CALL_FLAG_SET_POSITION) end
 
-	local parentTransformInvert = GetInverse(parentTransform)
+	local parentTransformInvert = parentTransform:GetInverse()
 	if not parentTransformInvert then return bit.bor(ERR_FLAG_PARENT_SINGULAR, CALL_FLAG_SET_POSITION) end
 
 
@@ -225,7 +230,7 @@ function ENTITY:UPMaSetBonePos(boneName, posw)
 	local parentTransform = parentId == -1 and self:GetWorldTransformMatrix() or self:GetBoneMatrix(parentId)
 	if not parentTransform then return bit.bor(ERR_FLAG_PARENT, CALL_FLAG_SET_POS) end
 
-	local parentTransformInvert = GetInverse(parentTransform)
+	local parentTransformInvert = parentTransform:GetInverse()
 	if not parentTransformInvert then return bit.bor(ERR_FLAG_PARENT_SINGULAR, CALL_FLAG_SET_POS) end
 
 	local newManipPos = parentTransformInvert
@@ -249,7 +254,7 @@ function ENTITY:UPMaSetBoneAng(boneName, angw)
 	local curTransform = self:GetBoneMatrix(boneId)
 	if not curTransform then return bit.bor(ERR_FLAG_MATRIX, CALL_FLAG_SET_ANG) end
 	
-	local curTransformInvert = GetInverse(curTransform)
+	local curTransformInvert = curTransform:GetInverse()
 	if not curTransformInvert then return bit.bor(ERR_FLAG_SINGULAR, CALL_FLAG_SET_ANG) end
 
 	local curAngManip = Matrix()
@@ -324,7 +329,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 	for _, mappingData in ipairs(boneIterator) do
 		-- 添加一些动态特性吧
 		mappingData = UnpackMappingData
-			and UnpackMappingData(t, self, tarSnapshotOrEnt, mappingData) 
+			and UnpackMappingData(self, t, snapshot, tarSnapshotOrEnt, mappingData) 
 			or mappingData
 
 		local boneName = mappingData.bone
@@ -357,7 +362,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 		if lerpMethod == CALL_FLAG_LERP_WORLD then	
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
 			if LerpRangeHandler then
-				initMatrix, finalMatrix = LerpRangeHandler(t, self, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+				initMatrix, finalMatrix = LerpRangeHandler(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
 			end
 
 			local result = Matrix()
@@ -383,12 +388,12 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 				continue 
 			end
 
-			if IsMatrixSingular(parentMatrix) then 
+			if IsMatrixSingularFast(parentMatrix) then 
 				flags[boneName] = bit.bor(ERR_FLAG_PARENT_SINGULAR, lerpMethod)
 				continue 
 			end
 
-			local tarParentMatrixInvert = GetInverse(tarParentMatrix)
+			local tarParentMatrixInvert = tarParentMatrix:GetInverse()
 			if not tarParentMatrixInvert then 
 				flags[boneName] = bit.bor(ERR_FLAG_TAR_PARENT_SINGULAR, lerpMethod)
 				continue 
@@ -398,7 +403,7 @@ function ENTITY:UPMaLerpBoneBatch(t, snapshot, tarSnapshotOrEnt, boneIterator)
 			finalMatrix = offsetMatrix and finalMatrix * offsetMatrix or finalMatrix
 
 			if LerpRangeHandler then
-				initMatrix, finalMatrix = LerpRangeHandler(t, self, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
+				initMatrix, finalMatrix = LerpRangeHandler(self, t, snapshot, tarSnapshotOrEnt, initMatrix, finalMatrix, mappingData)
 			end
 
 			local result = Matrix()
@@ -496,7 +501,7 @@ UPManip.LERP_METHOD = {LOCAL = CALL_FLAG_LERP_LOCAL, WORLD = CALL_FLAG_LERP_WORL
 UPManip.RUNTIME_FLAG_MSG = RUNTIME_FLAG_MSG
 UPManip.GetBoneMatrixFromSnapshot = GetBoneMatrixFromSnapshot
 UPManip.GetMatrixLocal = GetMatrixLocal
-UPManip.IsMatrixSingular = IsMatrixSingular
+UPManip.IsMatrixSingularFast = IsMatrixSingularFast
 UPManip.InitBoneIterator = function(boneIterator)
 	-- 主要是验证参数类型和初始化偏移矩阵
 	-- parent 和 tarParent 字段仅对局部空间插值有效
@@ -505,7 +510,7 @@ UPManip.InitBoneIterator = function(boneIterator)
 	assert(isfunction(boneIterator.LerpRangeHandler) or boneIterator.LerpRangeHandler == nil, string.format('boneIterator.LerpRangeHandler is invalid, expect (function or nil), got %s', type(boneIterator.LerpRangeHandler)))
 	assert(isfunction(boneIterator.UnpackMappingData) or boneIterator.UnpackMappingData == nil, string.format('boneIterator.UnpackMappingData is invalid, expect (function or nil), got %s', type(boneIterator.UnpackMappingData)))
 
-	for _, mappingData in pairs(boneIterator) do
+	for _, mappingData in ipairs(boneIterator) do
 		assert(istable(mappingData), string.format('boneIterator value is invalid, expect table, got %s', type(mappingData)))
 		assert(isstring(mappingData.bone), string.format('field "bone" is invalid, expect string, got %s', type(mappingData.bone)))
 		assert(isstring(mappingData.tarBone) or mappingData.tarBone == nil, string.format('field "tarBone" is invalid, expect (string or nil), got %s', type(mappingData.tarBone)))
