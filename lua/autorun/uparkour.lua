@@ -21,8 +21,9 @@
 --]]
 
 UPar = UPar or {}
-UPar.Version = '3.0.0 alpha'
+UPar.Version = '3.0.0 beta'
 
+UPar.g_cache = UPar.g_cache or {}
 UPar.emptyfunc = function() end
 UPar.anypass = setmetatable({}, {__index = function() return true end})
 UPar.emptyTable = setmetatable({}, {
