@@ -127,7 +127,13 @@ UPar.PushFrameLoop = function(identity, iterator, addition, timeout, clear, hook
 	end
 
 	local old = FrameLoop[identity]
-	if old then hook.Run(POP_HOOK, identity, CurTime(), old.add, 'OVERRIDE') end
+	if old then 
+		if isfunction(old.clear) then
+			local succ, result = pcall(old.clear, identity, CurTime(), old.add, 'OVERRIDE')
+			if not succ then ErrorNoHaltWithStack(result) end
+		end
+		hook.Run(POP_HOOK, identity, CurTime(), old.add, 'OVERRIDE') 
+	end
 
 	local endtime = timeout + CurTime()
 	addition = istable(addition) and addition or {}
@@ -157,8 +163,7 @@ UPar.PopFrameLoop = function(identity, silent)
 	end
 
 	if isfunction(frameData.clear) then
-		local succ, result = pcall(frameData.clear, identity, CurTime(), frameData.add, 'MANUAL')
-		if not succ then ErrorNoHaltWithStack(result) end
+		frameData.clear(identity, CurTime(), frameData.add, 'MANUAL')
 	end
 
 	if not silent then

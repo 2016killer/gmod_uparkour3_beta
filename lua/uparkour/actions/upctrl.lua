@@ -226,10 +226,6 @@ RESET_HOOK_IDENTITY = nil
 
 
 if CLIENT then
-	local FLAGS_UNHANDLED = UPKeyboard.KEY_EVENT_FLAGS.UNHANDLED
-	local FLAGS_HANDLED = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
-	local FLAGS_SKIPPED = UPKeyboard.KEY_EVENT_FLAGS.SKIPPED
-
 	UPKeyboard.Register('upctrl_lowclimb', '[33,65]')
 	UPKeyboard.Register('upctrl_highclimb', '[33,65]')
 	UPKeyboard.Register('upctrl_vaultdl', '[33,65]')
@@ -248,10 +244,10 @@ if CLIENT then
 
 		RunConsoleCommand(CMD_ADD, actFlag)
 
-		eventflags['upctrl_lowclimb'] = FLAGS_HANDLED
-		eventflags['upctrl_highclimb'] = FLAGS_HANDLED
-		eventflags['upctrl_vaultdl'] = FLAGS_HANDLED
-		eventflags['upctrl_vaultdh'] = FLAGS_HANDLED
+		eventflags['upctrl_lowclimb'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
+		eventflags['upctrl_highclimb'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
+		eventflags['upctrl_vaultdl'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
+		eventflags['upctrl_vaultdh'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
 	end)
 
 	UPar.SeqHookAdd('UParKeyRelease', 'upctrl', function(eventflags)
@@ -267,10 +263,10 @@ if CLIENT then
 
 		RunConsoleCommand(CMD_REMOVE, actFlag)
 
-		eventflags['upctrl_lowclimb'] = FLAGS_HANDLED
-		eventflags['upctrl_highclimb'] = FLAGS_HANDLED
-		eventflags['upctrl_vaultdl'] = FLAGS_HANDLED
-		eventflags['upctrl_vaultdh'] = FLAGS_HANDLED
+		eventflags['upctrl_lowclimb'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
+		eventflags['upctrl_highclimb'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
+		eventflags['upctrl_vaultdl'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
+		eventflags['upctrl_vaultdh'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
 	end)
 
 	UPar.SeqHookAdd('UParActCVarWidget_upctrl', 'default', function(cvCfg, panel)
