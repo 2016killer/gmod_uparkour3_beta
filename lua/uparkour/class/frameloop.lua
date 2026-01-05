@@ -258,16 +258,16 @@ UPar.GetFrameLoopAddiKV = function(identity, ...)
 	local target = frameData.add
 
 	local total = select('#', ...)
-	assert(total >= 2, 'at least 2 arguments required')
+	assert(total >= 1, 'at least 1 arguments required')
 
 	local keyValue = {...}
 	
-	for i = 1, total - 2 do
+	for i = 1, total - 1 do
 		target = target[keyValue[i]]
 		if not istable(target) then return nil end
 	end
 
-	return target[keyValue[total - 1]]
+	return target[keyValue[total]]
 end
 
 UPar.SetFrameLoopEndTime = function(identity, endTime, silent)
