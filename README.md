@@ -51,19 +51,9 @@ UPAction 、 UPEffect 生命周期的同步永远是一次性的。 因为同步
 
 ### 贡献者
 
-名字: 22050hz amen break sample  
-链接: https://steamcommunity.com/id/laboratorymember001  
-贡献: **mighty foot engaged** 动画  
-(可能是他? 我不知道, 因为原插件被隐藏了, 所以我无法追溯)
-
 名字: 白狼
 链接: https://steamcommunity.com/id/whitewolfking/
 贡献: 大部分代码以及中文文档
-
-名字: YuRaNnNzZZ
-链接: https://steamcommunity.com/id/yurannnzzz
-贡献: hm500 动画
-
 
 名字: 豆小姐
 链接: 豆包AI
