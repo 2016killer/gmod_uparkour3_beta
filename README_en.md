@@ -53,12 +53,7 @@ All other extensible features follow this same pattern.
 
 ### Contributors
 
-Name: 白狼
-Link: https://steamcommunity.com/id/whitewolfking/  
-Contribution: Most of the code and Chinese documentation
-
 Name: Miss Dou  
-Link: Doubao AI  
 Contribution: Part of the code and English documentation
 
 

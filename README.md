@@ -51,12 +51,7 @@ UPAction 、 UPEffect 生命周期的同步永远是一次性的。 因为同步
 
 ### 贡献者
 
-名字: 白狼
-链接: https://steamcommunity.com/id/whitewolfking/
-贡献: 大部分代码以及中文文档
-
 名字: 豆小姐
-链接: 豆包AI
 贡献: 部分代码以及英文文档
 
 
