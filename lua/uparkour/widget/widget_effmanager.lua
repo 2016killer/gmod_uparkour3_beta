@@ -303,7 +303,12 @@ end, 10)
 
 UPar.SeqHookAdd('UParEffVarPreviewWidget', 'default', function(_, _, key, val, preview, keyColor)
 	local label = nil
-	if key == 'AAADesc'  then 
+
+	if isfunction(val) then 
+		return 
+	end
+
+	if key == 'AAADesc' then 
 		label = preview:Help(string.format('%s = %s', UPar.SnakeTranslate(key), language.GetPhrase(tostring(val))))
 	else
 		label = preview:Help(string.format('%s = %s', UPar.SnakeTranslate(key), val))
