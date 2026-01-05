@@ -112,6 +112,10 @@ if CLIENT then
 end
 
 UPar.debugwireframebox = function(pos, mins, maxs, lifetime, color, ignoreZ)
+	if not GetConVar('developer') or not GetConVar('developer'):GetBool() then
+		return
+	end
+
 	lifetime = lifetime or 1
 	color = color or Color(255, 255, 255)
 	ignoreZ = ignoreZ or false
