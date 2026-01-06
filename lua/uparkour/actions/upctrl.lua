@@ -226,10 +226,10 @@ RESET_HOOK_IDENTITY = nil
 
 
 if CLIENT then
-	UPKeyboard.Register('upctrl_lowclimb', '[33,65]')
-	UPKeyboard.Register('upctrl_highclimb', '[33,65]')
-	UPKeyboard.Register('upctrl_vaultdl', '[33,65]')
-	UPKeyboard.Register('upctrl_vaultdh', '[33,79,65]')
+	UPKeyboard.Register('upctrl_lowclimb', '[33,65]', '#uplowclimb_key')
+	UPKeyboard.Register('upctrl_highclimb', '[33,65]', '#uphighclimb_key')
+	UPKeyboard.Register('upctrl_vaultdl', '[33,65]', '#upvaultdl_key')
+	UPKeyboard.Register('upctrl_vaultdh', '[33,79,65]', '#upvaultdh_key')
 
 	UPar.SeqHookAdd('UParKeyPress', 'upctrl', function(eventflags)
 		local actFlag = 0

@@ -6,7 +6,7 @@
 UPar.GenEffClear = function(self, ply, _, interruptSource)
 	if SERVER then
 		ply:SetNWString('UP_WOS', '')
-	elseif CLIENT then
+	elseif CLIENT and VManip then
 		local currentAnim = VManip:GetCurrentAnim()
 		if currentAnim and currentAnim == self.VManipAnim then
 			if interruptSource then
@@ -36,20 +36,6 @@ UPar.GetPlayerEffect = function(ply, actName, effName)
         return actEffects[effName]
     end
 end
-
-UPar.GeneralEffectClear = function(self, ply, interruptSource, _)
-	if SERVER then
-		ply:SetNWString('UP_WOS', '')
-	elseif CLIENT and interruptSource then
-		VManip:Remove()
-	elseif CLIENT then
-		local currentAnim = VManip:GetCurrentAnim()
-		if currentAnim and currentAnim == self.VManipAnim then
-			VManip:QuitHolding(currentAnim)
-		end
-	end
-end
-
 
 UPar.EffectTest = function(ply, actName, effName)
 	local effect = UPar.GetPlayerEffect(ply, actName, effName)

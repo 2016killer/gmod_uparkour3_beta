@@ -336,7 +336,7 @@ UPar.SeqHookAdd('UParEffVarEditorWidget', 'default', function(_, _, key, val, ed
 		return 
 	end
 	
-	if key == 'VManipAnim' or key == 'VMLegsAnim' then
+	if VManip and (key == 'VManipAnim' or key == 'VMLegsAnim') then
 		local label = editor:Help(UPar.SnakeTranslate(key))
 
 		-- 针对特殊的键名进行特殊处理

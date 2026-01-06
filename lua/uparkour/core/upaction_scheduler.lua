@@ -474,7 +474,7 @@ elseif CLIENT then
 			local batch = net.ReadTable()
 			local eventFlag, actName, data, interruptSource = unpack(batch)
 			if eventFlag == END_FLAG then
-				print(string.format('[UPar]: cl_act: end flag %d', eventFlag))
+				// print(string.format('[UPar]: cl_act: end flag %d', eventFlag))
 				break
 			end
 

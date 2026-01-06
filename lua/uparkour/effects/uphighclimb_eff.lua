@@ -43,12 +43,12 @@ function effect:start_first(ply)
 	end
 
 	-- VManip手部动画、音效
-	if CLIENT and self.VManipAnim and self.VManipAnim ~= '' then
+	if CLIENT and VManip and self.VManipAnim and self.VManipAnim ~= '' then
 		VManip:PlayAnim(self.VManipAnim)
 	end
 
 	-- VManip腿部动画
-	if CLIENT and self.VMLegsAnim and self.VMLegsAnim ~= '' then
+	if CLIENT and VMLegs and self.VMLegsAnim and self.VMLegsAnim ~= '' then
 		VMLegs:PlayAnim(self.VMLegsAnim)
 	end
 
