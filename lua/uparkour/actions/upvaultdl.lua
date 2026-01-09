@@ -302,5 +302,5 @@ if CLIENT then
 
 			return true
 		end
-	end)
+	end, 1)
 end
