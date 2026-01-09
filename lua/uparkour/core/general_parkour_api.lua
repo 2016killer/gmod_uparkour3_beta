@@ -266,9 +266,9 @@ UPar.VaultDetector = function(ply, obsTrace, climbTrace, ehlenFrac, evlenFrac)
 	return vaultTrace, obsImgTrace
 end
 
-UPar.GetFallDamageInfo = function(ply, fallspeed, ref)
+UPar.GetFallDamageInfo = function(ply, fallspeed, thr)
 	fallspeed = fallspeed or ply:GetVelocity()[3]
-	if fallspeed < ref then
+	if fallspeed < thr then
 		local damage = hook.Run('GetFallDamage', ply, fallspeed) or 0
 		if isnumber(damage) and damage > 0 then
 			local d = DamageInfo()
