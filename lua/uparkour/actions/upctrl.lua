@@ -50,6 +50,20 @@ controller:InitConVars({
 		default = '0.1',
 		widget = 'NumberWang',
 		min = 0, max = 3600, decimals = 3, interval = 0.05,
+	},
+
+	{
+		name = 'upctrl_die_speed',
+		default = '600',
+		widget = 'NumSlider',
+		min = 0, max = 1000, decimals = 0,
+		help = true,
+	},
+
+	{
+		name = 'upctrl_falldamage',
+		default = '1',
+		widget = 'CheckBox'
 	}
 })
 
@@ -88,6 +102,12 @@ function controller:Trigger(ply, actFlag)
 	actFlag = isnumber(actFlag) and actFlag or (ply.upctrl_act_flags or 0)
 
 	local refVel = ply:GetVelocity()
+	local dieSpeed = self.ConVars.upctrl_die_speed:GetFloat()
+
+	if refVel[3] < -math.abs(dieSpeed) then
+		return
+	end
+
 
 	local lowObsTrace = nil
 	local lowClimbTrace = nil
@@ -248,7 +268,7 @@ if CLIENT then
 		eventflags['upctrl_highclimb'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
 		eventflags['upctrl_vaultdl'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
 		eventflags['upctrl_vaultdh'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
-	end)
+	end, 1)
 
 	UPar.SeqHookAdd('UParKeyRelease', 'upctrl', function(eventflags)
 		local actFlag = 0
@@ -267,7 +287,7 @@ if CLIENT then
 		eventflags['upctrl_highclimb'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
 		eventflags['upctrl_vaultdl'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
 		eventflags['upctrl_vaultdh'] = UPKeyboard.KEY_EVENT_FLAGS.HANDLED
-	end)
+	end, 1)
 
 	UPar.SeqHookAdd('UParActCVarWidget_upctrl', 'default', function(cvCfg, panel)
 		local cvName = cvCfg.name
@@ -309,6 +329,6 @@ if CLIENT then
 
 			return true
 		end
-	end)
+	end, 1)
 end
 
