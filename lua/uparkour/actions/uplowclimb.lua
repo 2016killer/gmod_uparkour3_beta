@@ -21,13 +21,13 @@ local uplowclimb = UPAction:Register('uplowclimb', {
 })
 
 uplowclimb:InitConVars({
-	{label = '#uplowclimb.option.detector', widget = 'Label'},
-
 	{
 		name = 'upctrl_los_cos',
 		default = '0.64',
 		invisible = true
 	},
+
+	{label = '#uplowclimb.option.detector', widget = 'Label'},
 
 	{
 		name = 'uplc_ohlen_f',
@@ -158,7 +158,7 @@ function uplowclimb:Check(ply, pos, dirNorm, refVel)
 end
 
 function uplowclimb:Start(ply, data)
-    if CLIENT then 
+	if CLIENT then 
 		local timeout = isnumber(data.duration) and data.duration * 2 or 0.5
 		local needduck = data.needduck
 		UPar.SetMoveControl(true, true, 

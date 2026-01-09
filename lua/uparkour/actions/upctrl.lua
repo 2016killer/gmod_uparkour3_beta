@@ -58,12 +58,6 @@ controller:InitConVars({
 		widget = 'NumSlider',
 		min = 0, max = 1000, decimals = 0,
 		help = true,
-	},
-
-	{
-		name = 'upctrl_falldamage',
-		default = '1',
-		widget = 'CheckBox'
 	}
 })
 

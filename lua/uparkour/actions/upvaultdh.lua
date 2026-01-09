@@ -188,7 +188,7 @@ function upvaultdh:Check(ply, obsTrace, climbTrace, refVel)
 end
 
 function upvaultdh:Start(ply, data)
-    if CLIENT then 
+    if CLIENT then
 		local timeout = ((isnumber(data[1].duration) and data[1].duration or 0) + 
 			(isnumber(data[2].duration) and data[2].duration or 0)) + 0.5
 

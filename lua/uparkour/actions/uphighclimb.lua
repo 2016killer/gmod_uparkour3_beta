@@ -21,13 +21,13 @@ local uphighclimb = UPAction:Register('uphighclimb', {
 })
 
 uphighclimb:InitConVars({
-	{label = '#uphighclimb.option.detector', widget = 'Label'},
-
 	{
 		name = 'upctrl_los_cos',
 		default = '0.64',
 		invisible = true
 	},
+
+	{label = '#uphighclimb.option.detector', widget = 'Label'},
 
 	{
 		name = 'uphc_ohlen_f',

@@ -266,20 +266,6 @@ UPar.VaultDetector = function(ply, obsTrace, climbTrace, ehlenFrac, evlenFrac)
 	return vaultTrace, obsImgTrace
 end
 
-UPar.GetFallDamageInfo = function(ply, fallspeed, thr)
-	fallspeed = fallspeed or ply:GetVelocity()[3]
-	if fallspeed < thr then
-		local damage = hook.Run('GetFallDamage', ply, fallspeed) or 0
-		if isnumber(damage) and damage > 0 then
-			local d = DamageInfo()
-			d:SetDamage(damage)
-			d:SetAttacker(Entity(0))
-			d:SetDamageType(DMG_FALL) 
-
-			return d	
-		end 
-	end
-end
 
 local function Hermite3(t_norm, m0, m1)
     local t = math.Clamp(t_norm, 0, 1)
